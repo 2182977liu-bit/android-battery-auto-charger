@@ -13,6 +13,7 @@ AutoPhoneZ 局域网网页查看端 · 多设备版（测试用）
     GET  /api/state     面板用的 JSON
     POST /api/simulate  模拟一条（可 ?id=phoneB 指定设备）
     POST /api/reset     清空所有数据重新开始
+    POST /api/token     网页上修改上报 Token（body: {"token":"..."}）
 
 多设备靠 device_id 区分：每台手机在自己的 App 里填不同的设备 ID，
 接收端按 device_id 各存一份状态、各自的曲线和统计，互不覆盖。
@@ -25,6 +26,7 @@ Windows 首次运行会弹防火墙提示，必须勾选「专用网络」并允
 """
 
 import json
+import os
 import socket
 import sys
 import threading
@@ -35,6 +37,18 @@ from urllib.parse import urlparse, parse_qs
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
 TOKEN = sys.argv[2] if len(sys.argv) > 2 else "test-token-123456"
+
+# Token 持久化：设了 AUTOZ_TOKEN_FILE 时，网页上改的 Token 会写进该文件，
+# 重启后优先读文件，命令行参数只作为初始值。
+TOKEN_FILE = os.environ.get("AUTOZ_TOKEN_FILE", "")
+if TOKEN_FILE:
+    try:
+        with open(TOKEN_FILE, encoding="utf-8") as _f:
+            _saved = _f.read().strip()
+        if _saved:
+            TOKEN = _saved
+    except Exception:
+        pass
 
 LOW, HIGH = 30, 90
 WARN_AFTER_SEC = 400      # 超过 6.5 分钟没数据 -> 黄色（心跳是 5 分钟）
@@ -299,6 +313,20 @@ HTML = """<!DOCTYPE html>
     <div class="totals" id="totals">暂无设备</div>
   </header>
 
+  <div class="panel" style="padding:14px 16px">
+    <div class="row" style="margin-top:0">
+      <span style="font-size:13px;color:#8b949e">上报 Token</span>
+      <input id="tokenInput" value="__TOKEN__" spellcheck="false"
+             style="background:#0d1117;border:1px solid #30363d;color:#e6edf3;
+                    padding:7px 10px;border-radius:8px;font-size:13px;width:220px">
+      <button onclick="saveToken()">保存</button>
+      <span id="tokenMsg" style="font-size:12px;color:#8b949e"></span>
+    </div>
+    <div style="font-size:12px;color:#8b949e;margin-top:6px">
+      改完这里，手机 App 里的 Token 要同步改成一样，否则上报会被 401 拒绝。
+    </div>
+  </div>
+
   <div class="grid" id="devices">
     <div class="dev" style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8b949e">
       还没有任何设备上报。<br><br>
@@ -336,6 +364,31 @@ HTML = """<!DOCTYPE html>
 const BAR_MARKS = [__LOW__, __HIGH__];
 let cardCache = {};
 let lastIdSet = "";
+
+async function saveToken(){
+  const input = document.getElementById("tokenInput");
+  const msg = document.getElementById("tokenMsg");
+  const t = input.value.trim();
+  if (!t) { msg.style.color = "#f85149"; msg.textContent = "Token 不能为空"; return; }
+  try {
+    const r = await fetch("api/token", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({token: t})
+    });
+    if (r.ok) {
+      msg.style.color = "#3fb950";
+      msg.textContent = "已保存，页面即将刷新…";
+      setTimeout(() => location.reload(), 700);
+    } else {
+      msg.style.color = "#f85149";
+      msg.textContent = "保存失败（可能含空格或过长）";
+    }
+  } catch (e) {
+    msg.style.color = "#f85149";
+    msg.textContent = "保存失败：" + e;
+  }
+}
 let lastEventKey = "";
 let lastDevices = [];
 
@@ -542,7 +595,7 @@ function render(s){
 
 async function tick(){
   try{
-    const r = await fetch("/api/state", {cache:"no-store"});
+    const r = await fetch("api/state", {cache:"no-store"});
     render(await r.json());
   }catch(e){
     document.getElementById("totals").textContent = "面板服务断开";
@@ -551,7 +604,7 @@ async function tick(){
 
 async function simulate(id){
   try{
-    const r = await fetch("/api/simulate?id=" + encodeURIComponent(id), {method:"POST"});
+    const r = await fetch("api/simulate?id=" + encodeURIComponent(id), {method:"POST"});
     if (!r.ok) throw new Error("HTTP " + r.status);
     await tick();
   }catch(e){ alert("模拟失败：" + e.message); }
@@ -559,7 +612,7 @@ async function simulate(id){
 
 async function resetAll(){
   if (!confirm("清空所有设备的统计数据？")) return;
-  await fetch("/api/reset", {method:"POST"});
+  await fetch("api/reset", {method:"POST"});
   lastIdSet = ""; lastEventKey = "";
   await tick();
 }
@@ -575,8 +628,8 @@ window.addEventListener("resize", () => lastDevices.forEach(updateCard));
 
 def render_html() -> bytes:
     html = (HTML
-            .replace("__IP__", local_ip())
-            .replace("__PORT__", str(PORT))
+            .replace("__IP__", os.environ.get("AUTOZ_PUBLIC_IP") or local_ip())
+            .replace("__PORT__", os.environ.get("AUTOZ_PUBLIC_PORT") or str(PORT))
             .replace("__TOKEN__", TOKEN)
             .replace("__LOW__", str(LOW))
             .replace("__HIGH__", str(HIGH)))
@@ -634,6 +687,27 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if path == "/api/token":
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(length) if length else b""
+            try:
+                data = json.loads(raw or b"{}")
+                new_token = str(data.get("token", "")).strip()
+            except Exception:
+                return self._json(400, {"ok": False, "err": "bad_json"})
+            if not new_token or len(new_token) > 64 or any(c.isspace() for c in new_token):
+                return self._json(400, {"ok": False, "err": "bad_token_value"})
+            global TOKEN
+            TOKEN = new_token
+            if TOKEN_FILE:
+                try:
+                    with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+                        f.write(TOKEN)
+                except Exception as e:
+                    print(f"[{now_str()}] 写 Token 文件失败: {e}")
+            print(f"[{now_str()}] Token 已更新为 {TOKEN}")
+            return self._json(200, {"ok": True, "token": TOKEN})
 
         if path == "/api/reset":
             with LOCK:
@@ -699,7 +773,7 @@ def main():
     except Exception:
         pass
 
-    ip = local_ip()
+    ip = os.environ.get("AUTOZ_PUBLIC_IP") or local_ip()
     print("=" * 68)
     print(" AutoPhoneZ 局域网网页查看端 · 多设备版（测试用，替代 ESP32-S3）")
     print(f" 手机填 IP : {ip}")
