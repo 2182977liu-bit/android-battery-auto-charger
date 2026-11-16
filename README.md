@@ -91,6 +91,9 @@
 CI 自动发版：改完 `versionName` 直接 push，workflow 会读 `app/build.gradle.kts`，建 `v<versionName>` 的 Release，
 上传 APK 与 `version.txt`，最后再回读这两条直链自检。
 
+完整实现细节（两侧数据契约、CI 片段、`PackageInstaller` 用法、踩坑清单、迁移到别的项目要改哪几处）
+见 [`App自动更新实现说明.md`](App自动更新实现说明.md)。
+
 ## 三·六、App 界面
 
 零第三方依赖，全部用系统控件 + 4 个 drawable XML，APK 约 34 KB：
