@@ -48,6 +48,7 @@ public class MainActivity extends Activity {
             SharedPreferences p = Config.prefs(MainActivity.this);
             boolean running = p.getBoolean(Config.KEY_RUNNING, false);
             tvStatus.setText(running ? "● 服务运行中" : "○ 服务已停止");
+            tvStatus.setTextColor(getColor(running ? R.color.ok : R.color.off));
             appendLogTail();
             ui.postDelayed(this, 1000L);
         }

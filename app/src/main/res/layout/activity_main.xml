@@ -2,6 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/page"
     android:fillViewport="true">
 
     <LinearLayout
@@ -11,159 +12,266 @@
         android:padding="16dp">
 
         <TextView
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="电量哨兵"
-            android:textSize="20sp"
+            android:textColor="@color/text"
+            android:textSize="24sp"
             android:textStyle="bold" />
 
         <TextView
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="跨阈值(30%/90%)、充电通断、机型上报，定向 POST 到 ESP32-S3，全程带 Token。"
+            android:text="跨阈值、充断电与机型上报，定向 POST 到指定地址，全程带 Token。"
+            android:textColor="@color/sub"
             android:textSize="12sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="ESP32 IP"
-            android:textSize="13sp" />
-
-        <EditText
-            android:id="@+id/etHost"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="192.168.1.100"
-            android:inputType="text"
-            android:singleLine="true"
-            android:textSize="14sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="端口"
-            android:textSize="13sp" />
-
-        <EditText
-            android:id="@+id/etPort"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="8080"
-            android:inputType="number"
-            android:singleLine="true"
-            android:textSize="14sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Token（与 ESP32 端 AUTH_TOKEN 完全一致）"
-            android:textSize="13sp" />
-
-        <EditText
-            android:id="@+id/etToken"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="建议 16 位以上随机串"
-            android:inputType="text"
-            android:singleLine="true"
-            android:textSize="14sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="设备 ID（多台手机时区分）"
-            android:textSize="13sp" />
-
-        <EditText
-            android:id="@+id/etDeviceId"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="phoneA"
-            android:inputType="text"
-            android:singleLine="true"
-            android:textSize="14sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/tvStatus"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:orientation="vertical">
+                android:text="○ 服务已停止"
+                android:textColor="@color/off"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="低电量阈值 %"
-                    android:textSize="13sp" />
-
-                <EditText
-                    android:id="@+id/etLow"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="30"
-                    android:inputType="number"
-                    android:singleLine="true"
-                    android:textSize="14sp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
+            <TextView
+                android:id="@+id/tvVersion"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="高电量阈值 %"
-                    android:textSize="13sp" />
-
-                <EditText
-                    android:id="@+id/etHigh"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="90"
-                    android:inputType="number"
-                    android:singleLine="true"
-                    android:textSize="14sp" />
-            </LinearLayout>
+                android:text="v1.3"
+                android:textColor="@color/sub"
+                android:textSize="12sp" />
         </LinearLayout>
 
-        <TextView
+        <!-- ===================== 上报目标 ===================== -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="心跳间隔（分钟，0=关闭）"
-            android:textSize="13sp" />
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="14dp">
 
-        <EditText
-            android:id="@+id/etHeartbeat"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="上报目标"
+                android:textColor="@color/text"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="服务器 IP"
+                android:textColor="@color/sub"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etHost"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="192.168.124.4"
+                android:inputType="text"
+                android:singleLine="true"
+                android:textColor="@color/text"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="端口"
+                        android:textColor="@color/sub"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/etPort"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="8080"
+                        android:inputType="number"
+                        android:singleLine="true"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="设备 ID"
+                        android:textColor="@color/sub"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/etDeviceId"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="phoneA"
+                        android:inputType="text"
+                        android:singleLine="true"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Token（与接收端一致）"
+                android:textColor="@color/sub"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etToken"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="建议 16 位以上随机串"
+                android:inputType="text"
+                android:singleLine="true"
+                android:textColor="@color/text"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- ===================== 阈值与心跳 ===================== -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="5"
-            android:inputType="number"
-            android:singleLine="true"
-            android:textSize="14sp" />
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="14dp">
 
-        <CheckBox
-            android:id="@+id/cbBoot"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="开机自动启动"
-            android:textSize="13sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="阈值与心跳"
+                android:textColor="@color/text"
+                android:textSize="13sp"
+                android:textStyle="bold" />
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="低电量 %"
+                        android:textColor="@color/sub"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/etLow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="30"
+                        android:inputType="number"
+                        android:singleLine="true"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="高电量 %"
+                        android:textColor="@color/sub"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/etHigh"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="90"
+                        android:inputType="number"
+                        android:singleLine="true"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="心跳(分)"
+                        android:textColor="@color/sub"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/etHeartbeat"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="5"
+                        android:inputType="number"
+                        android:singleLine="true"
+                        android:textColor="@color/text"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <CheckBox
+                android:id="@+id/cbBoot"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="开机自动启动"
+                android:textColor="@color/text"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- ===================== 操作 ===================== -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -175,20 +283,32 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="保存并启动" />
+                android:background="@drawable/btn_primary"
+                android:minHeight="0dp"
+                android:padding="10dp"
+                android:text="保存并启动"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btnStop"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="10dp"
                 android:layout_weight="1"
-                android:text="停止" />
+                android:background="@drawable/btn_secondary"
+                android:minHeight="0dp"
+                android:padding="10dp"
+                android:text="停止"
+                android:textColor="@color/text"
+                android:textSize="14sp" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:orientation="horizontal">
 
             <Button
@@ -196,56 +316,72 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="测试发送" />
+                android:background="@drawable/btn_secondary"
+                android:minHeight="0dp"
+                android:padding="10dp"
+                android:text="测试发送"
+                android:textColor="@color/text"
+                android:textSize="13sp" />
 
             <Button
                 android:id="@+id/btnBattery"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="10dp"
                 android:layout_weight="1"
-                android:text="电池优化白名单" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+                android:background="@drawable/btn_secondary"
+                android:minHeight="0dp"
+                android:padding="10dp"
+                android:text="电池白名单"
+                android:textColor="@color/text"
+                android:textSize="13sp" />
 
             <Button
                 android:id="@+id/btnUpdate"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="检查更新" />
-
-            <TextView
-                android:id="@+id/tvVersion"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="10dp"
                 android:layout_weight="1"
-                android:text="当前 v1.0"
-                android:textSize="12sp" />
+                android:background="@drawable/btn_secondary"
+                android:minHeight="0dp"
+                android:padding="10dp"
+                android:text="检查更新"
+                android:textColor="@color/text"
+                android:textSize="13sp" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/tvStatus"
+        <!-- ===================== 日志 ===================== -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="○ 服务已停止"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:layout_marginTop="14dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="运行日志"
+                android:textColor="@color/text"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="最新在底部 · 上翻暂停跟随"
+                android:textColor="@color/sub"
+                android:textSize="11sp" />
+        </LinearLayout>
 
         <ScrollView
             android:id="@+id/svLog"
             android:layout_width="match_parent"
             android:layout_height="180dp"
-            android:layout_marginTop="8dp"
-            android:background="#1b1b1b"
-            android:padding="8dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_log"
+            android:padding="10dp"
             android:scrollbars="vertical">
 
             <TextView
@@ -253,8 +389,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:fontFamily="monospace"
-                android:textColor="#d0d0d0"
+                android:textColor="@color/log_text"
                 android:textSize="11sp" />
         </ScrollView>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="日志只保留最近 40 条；数据存内存，重启即清空。"
+            android:textColor="@color/sub"
+            android:textSize="11sp" />
     </LinearLayout>
 </ScrollView>
