@@ -70,21 +70,46 @@
 
 ## 三·五、App 自动更新
 
-仓库是 public，App 打开 3 秒后静默查一次 `releases/latest`，界面上的「检查更新」也可以手动触发：
+仓库是 public，App 打开 3 秒后静默查一次，界面上的「检查更新」也可以手动触发：
 
-1. 取 `tag_name`（形如 `v1.1`）与自身 `versionName` 比较
-2. 有新版就下载 Release 里第一个 `.apk`（30 KB 上下，秒下）
+1. 读 `releases/latest/download/version.txt`（内容就是版本号，如 `1.5`），与自身 `versionName` 比较
+2. 有新版就下载 `releases/latest/download/app-debug.apk`（34 KB 上下，秒下）
 3. 交给 `PackageInstaller`，系统弹安装确认页，点「安装」
+
+**两个 URL 都不走 `api.github.com`**：GitHub 未鉴权 API 只有 **60 次/小时/IP** 配额，超了直接返回 **403**（不是 429），
+而且按出口 IP 共享——运营商 NAT 后面的人多就更容易见底。
+`releases/latest/download/<资产名>` 是 302 跳到静态 CDN，**零配额、无限次**，所以更新链路只走这条路。
 
 **最后一步必须手点**——普通 App 没有静默安装权限，这是 Android 的硬限制，不是没做完。全自动需要手机 root 或 Device Owner 模式。
 
 几个前提：
 
-- 首次仍需手动装一次：v1.0 里没有更新代码，装上 v1.1 之后才具备自动更新能力
+- 首次仍需手动装一次：v1.0 里没有更新代码，装上之后才具备自动更新能力
 - 要在系统设置里给本应用打开「安装未知应用」，否则 `PackageInstaller` 直接失败（App 会提示并跳到设置页）
-- 未鉴权的 GitHub API 限 60 次/小时/IP，每台手机每次启动查一次，完全够用
+- Release 里必须同时有 `version.txt` 和 `app-debug.apk` 两个资产，CI 会自动传
 
-CI 自动发版：改完 `versionName` 直接 push，workflow 会读 `app/build.gradle.kts`，建 `v<versionName>` 的 Release 并上传 APK。App 下次启动就能看到。
+CI 自动发版：改完 `versionName` 直接 push，workflow 会读 `app/build.gradle.kts`，建 `v<versionName>` 的 Release，
+上传 APK 与 `version.txt`，最后再回读这两条直链自检。
+
+## 三·六、App 界面
+
+零第三方依赖，全部用系统控件 + 4 个 drawable XML，APK 约 34 KB：
+
+| 区域 | 说明 |
+|---|---|
+| 顶部 | 标题、运行状态（运行绿 / 停止灰）、当前版本号 |
+| 上报目标卡片 | IP、端口、设备 ID、Token |
+| 阈值与心跳卡片 | 低/高电量阈值、心跳间隔、开机自启 |
+| 操作区 | 主按钮「保存并启动」青绿实心，其余灰底圆角 |
+| 运行日志 | 黑底圆角框，**固定 180dp**，超出后框内滚动，不再撑长页面 |
+
+日志框行为：
+
+- 新内容追加在**底部**，自动跟随滚动（类似 `tail -f`）
+- 用户上翻历史时暂停跟随，回到底部附近再恢复
+- 日志框嵌在页面的 ScrollView 里，已做触摸分发处理：按下时禁止父容器拦截，
+  到顶继续下拉、到底继续上推时把滑动交回页面
+- 只保留最近 40 条，无新内容时每秒刷新会跳过重绘，避免滚动位置抖动
 
 ## 四、装到手机
 
@@ -174,7 +199,7 @@ python tools/web_dashboard.py 9000 mytoken    # 自定义端口和 Token
 | 顶部汇总 | 设备台数、在线台数、累计报文数 |
 | 设备卡片（自动平铺） | 每台手机一张：设备 ID、机型+Android 版本、电量数字与进度条（≤30% 橙、≥90% 绿）、充电状态、温度、电压、供电方式、最后事件、最后上报时间、报文数、低/高电量触发次数、插拔次数、**继电器模拟状态**、迷你电量曲线 |
 | 在线徽章 | 每台独立判定：<6.5 分钟「在线」、>6.5 分钟「延迟」、>15 分钟「离线」 |
-| 事件流 | 最近 40 条**多设备混合**，带设备列、事件类型上色、来源 IP |
+| 事件流 | 最近 40 条**多设备混合**，带设备列、事件类型上色、来源 IP；固定高度滚动窗口，最新在底部、自动跟随，上翻即暂停 |
 | 底部 | 手机该填的 IP/端口/Token、阈值，以及「模拟 phoneA/B」「清空数据」按钮 |
 
 页面每秒自动刷新。
@@ -190,6 +215,23 @@ python tools/web_dashboard.py 9000 mytoken    # 自定义端口和 Token
 
 > Windows 首次运行会弹防火墙提示，**必须勾选「专用网络」并允许**，否则手机连不进来。
 > 这个页面只用于局域网测试，不要映射到公网——Token 是明文显示在页面上的。
+
+#### 网页端在线改 Token
+
+页面顶部有「上报 Token」输入框，保存后立即生效并写入 `AUTOZ_TOKEN_FILE` 指定的文件，重启服务不丢。
+
+注意优先级：**token.txt 存在时，文件内容优先于命令行传入的 Token**。
+所以走命令行改启动参数却不生效时，先看是不是文件里还存着旧值。
+改完记得把手机 App 里的 Token 同步改掉，否则上报会 401。
+
+另外可用 `AUTOZ_PUBLIC_IP` / `AUTOZ_PUBLIC_PORT` 覆盖页面提示里的对外地址——
+容器里 `local_ip()` 只能拿到 NAT 内部地址，直接显示出来会误导。
+
+#### 部署到手机（Podroid）
+
+面板可以跑在手机的 Linux 容器里，让同一局域网设备访问。完整步骤见仓库根的
+[`手机端部署速查.md`](手机端部署速查.md)：OpenRC 服务 `autoz` 开机自启，
+nginx 把 `/battery` 反代到面板进程，页面在 `/phone/`。
 
 #### 怎么用它判断「软件到底能不能用」
 
@@ -245,6 +287,8 @@ curl http://192.168.1.100:8080/status
 | 熄屏后突然不再上报 | ROM 后台清理，按第四节把四项设置打开 |
 | WiFi 连不上 | ESP32-S3 **只支持 2.4GHz**，确认路由器有 2.4G 频段且与手机同频段 |
 | 长时间无数据但继电器还吸着 | 固件有 30 分钟失联熔断，会强制断电；可改 `OFFLINE_TIMEOUT_MS` |
+| 更新失败 `HTTP 403` | 走的是 `api.github.com`，未鉴权配额 60 次/小时/IP 被打满。v1.3 起已改走静态直链，不受配额影响 |
+| 日志框拖不动 | 页面 ScrollView 与日志 ScrollView 嵌套导致父容器拦截滑动，v1.5 起已做触摸分发处理 |
 
 ## 九、设计取舍（为什么这么做）
 
@@ -253,20 +297,23 @@ curl http://192.168.1.100:8080/status
 - **连通性判定用 `ts` 新鲜度 + 心跳**，不用 LWT/retain：手机端不是常驻连接，MQTT 的遗嘱消息在这种实现下会误报。
 - **阈值判断放在 ESP32**：手机端只报真相，控制逻辑在硬件侧，两端实现可以独立替换。
 
-## 十、已验证项（2026-11-16）
+## 十、已验证项（更新至 2026-11-17）
 
 CI 与协议层面已跑通并核对：
 
 | 项 | 结果 |
 |---|---|
-| `build-android` | ✅ 通过，v1.0 产出 23.9 KB APK；v1.1（含自动更新）31.1 KB |
-| 自动更新链路 | ✅ Release `v1.1` 已发布，`releases/latest` 免鉴权能取到 `app-debug.apk`（31,171 字节） |
-| CI 自动发版 | ✅ 读完 `versionName` 后自动建 `v1.1` Release 并上传 APK |
+| `build-android` | ✅ 通过；v1.0 23.9 KB → v1.1 31.1 KB → v1.3 31.4 KB → v1.4 34.8 KB |
+| 自动更新链路 | ✅ v1.3 起走 `releases/latest/download/version.txt` 与 `app-debug.apk` 静态直链，免鉴权、不消耗 API 配额 |
+| CI 自动发版 | ✅ 读 `versionName` 建 Release，同时上传 APK 与 `version.txt`，并回读直链自检 |
+| 直链一致性 | ✅ `latest/download/app-debug.apk` 与对应版本资产 md5 一致 |
 | APK 签名 | ✅ 含 APK Signing Block（AGP 8 对 minSdk 24 默认只签 v2/v3，`META-INF` 里没有 CERT.RSA 属正常） |
-| APK 内容 | ✅ `classes2.dex` 内含 `BatteryMonitorService` / `MainActivity` / `HttpPush` / `Payload` / `BootReceiver` |
+| APK 内容 | ✅ `classes2.dex` 内含 `BatteryMonitorService` / `MainActivity` / `HttpPush` / `Payload` / `BootReceiver` / `Updater` / `InstallReceiver` |
 | `build-esp32` | ✅ 通过，产出 `firmware.bin`（约 490 KB） |
 | 两端字段一致性 | ✅ ESP32 读取的 10 个字段手机端全部发送，无缺失 |
 | 端到端协议（模拟接收端） | ✅ 28% → 继电器 ON；55% → 保持 ON；91% → OFF；错误 Token → 401 |
+| 网页端 Token 在线修改 | ✅ 新 Token 200 / 旧 Token 401 / 非法值 400，写入 token.txt 持久化 |
+| 真机上报（OPPO PGFM10，Android 16） | ✅ `TEST` / `PLUGGED` / `HEARTBEAT` 均正常入面板 |
 
 **尚未验证（必须真机做）**：
 
@@ -274,6 +321,17 @@ CI 与协议层面已跑通并核对：
 - 手机 ROM 的后台存活（不同厂商差异很大，需挂机 72 小时）
 - 真实充电器的通断时序
 
-## 十一、License
+## 十一、版本记录
+
+| 版本 | 内容 |
+|---|---|
+| v1.0 | 首版：阈值/充断电/机型上报 |
+| v1.1 | 自动更新（初版走 GitHub API） |
+| v1.2 | 日志改为固定高度滚动窗口 |
+| v1.3 | 自动更新改走静态直链，修复 403 限流 |
+| v1.4 | UI 重做：卡片分组、青绿主色、去 ActionBar |
+| v1.5 | 修复日志框嵌套滚动冲突，可正常上下滑动 |
+
+## 十二、License
 
 个人项目，随取随用。

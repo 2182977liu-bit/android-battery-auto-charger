@@ -14,6 +14,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -39,6 +40,7 @@ public class MainActivity extends Activity {
     private TextView tvVersion;
     private ScrollView svLog;
     private String lastLogText = "";
+    private float logTouchY;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
 
@@ -71,6 +73,7 @@ public class MainActivity extends Activity {
         tvLog = findViewById(R.id.tvLog);
         tvVersion = findViewById(R.id.tvVersion);
         svLog = findViewById(R.id.svLog);
+        setupLogScroll();
 
         loadConfigToUi();
 
@@ -299,6 +302,45 @@ public class MainActivity extends Activity {
         if (follow) {
             svLog.post(() -> svLog.fullScroll(View.FOCUS_DOWN));
         }
+    }
+
+    /**
+     * 页面本身是 ScrollView，日志框里又嵌了一个 ScrollView。
+     * 不处理的话父容器会把竖向滑动全部拦截，日志框根本拖不动。
+     *
+     * 按下时禁止父容器拦截，让日志框自己滚；
+     * 日志已经到顶还继续下拉、或到底还继续上推时，把滑动交回给页面，
+     * 免得页面被日志区"卡住"。
+     */
+    private void setupLogScroll() {
+        svLog.setOnTouchListener((v, ev) -> {
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    logTouchY = ev.getY();
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    View child = svLog.getChildAt(0);
+                    if (child != null) {
+                        int range = child.getHeight() - svLog.getHeight();
+                        boolean atTop = svLog.getScrollY() <= 0;
+                        boolean atBottom = svLog.getScrollY() >= range;
+                        float dy = ev.getY() - logTouchY;
+                        if ((atTop && dy > 0) || (atBottom && dy < 0)) {
+                            v.getParent().requestDisallowInterceptTouchEvent(false);
+                        }
+                    }
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    v.getParent().requestDisallowInterceptTouchEvent(false);
+                    break;
+                default:
+                    break;
+            }
+            // 不消费事件，交回 ScrollView 自己处理滚动
+            return false;
+        });
     }
 
     private void toast(String msg) {

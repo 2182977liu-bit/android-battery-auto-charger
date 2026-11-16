@@ -10,8 +10,8 @@ android {
         applicationId = "com.autophonez.batterymonitor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
     }
 
     // 固定 debug 签名：仓库内自带的 keystore，保证每次 CI 产出的 APK
