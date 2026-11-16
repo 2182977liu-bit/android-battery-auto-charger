@@ -189,6 +189,25 @@ curl http://192.168.1.100:8080/status
 - **连通性判定用 `ts` 新鲜度 + 心跳**，不用 LWT/retain：手机端不是常驻连接，MQTT 的遗嘱消息在这种实现下会误报。
 - **阈值判断放在 ESP32**：手机端只报真相，控制逻辑在硬件侧，两端实现可以独立替换。
 
-## 十、License
+## 十、已验证项（2026-11-16）
+
+CI 与协议层面已跑通并核对：
+
+| 项 | 结果 |
+|---|---|
+| `build-android` | ✅ 通过，产出 23.9 KB APK |
+| APK 签名 | ✅ 含 APK Signing Block（AGP 8 对 minSdk 24 默认只签 v2/v3，`META-INF` 里没有 CERT.RSA 属正常） |
+| APK 内容 | ✅ `classes2.dex` 内含 `BatteryMonitorService` / `MainActivity` / `HttpPush` / `Payload` / `BootReceiver` |
+| `build-esp32` | ✅ 通过，产出 `firmware.bin`（约 490 KB） |
+| 两端字段一致性 | ✅ ESP32 读取的 10 个字段手机端全部发送，无缺失 |
+| 端到端协议（模拟接收端） | ✅ 28% → 继电器 ON；55% → 保持 ON；91% → OFF；错误 Token → 401 |
+
+**尚未验证（必须真机做）**：
+
+- ESP32-S3 烧录后的实际接收与继电器动作
+- 手机 ROM 的后台存活（不同厂商差异很大，需挂机 72 小时）
+- 真实充电器的通断时序
+
+## 十一、License
 
 个人项目，随取随用。

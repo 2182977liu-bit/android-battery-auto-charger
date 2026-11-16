@@ -10,3 +10,6 @@ local.properties
 esp32/include/config.h
 esp32/.pio/
 esp32/.vscode/
+
+# 本地下载的构建产物
+dist/
