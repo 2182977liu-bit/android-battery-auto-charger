@@ -336,7 +336,7 @@ HTML = """<!DOCTYPE html>
   </div>
 
   <div class="panel">
-    <h2>事件流<em>最近 40 条 · 多设备混合</em></h2>
+    <h2>事件流<em>最新在底部 · 自动跟随（上翻即暂停）</em></h2>
     <div class="scroll">
       <table>
         <thead><tr>
@@ -570,7 +570,11 @@ function renderEvents(events){
     TEST:"#d29922", SIMULATED:"#d29922"
   };
   const tbody = document.getElementById("events");
-  const rows = events.slice().reverse().map(e => `<tr>
+  const scroller = tbody.closest(".scroll");
+  // 只有用户本来就在底部时才自动跟随，避免打断他向上翻历史
+  const follow = !scroller ||
+    (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 24);
+  const rows = events.map(e => `<tr>
     <td>${e.t}</td>
     <td style="color:#39d2c0">${esc(e.device)}</td>
     <td class="ev" style="color:${colors[e.event] || "#e6edf3"}">${esc(e.event)}</td>
@@ -581,6 +585,7 @@ function renderEvents(events){
   </tr>`).join("");
   tbody.innerHTML = rows ||
     `<tr><td colspan="7" style="color:#8b949e">还没有数据</td></tr>`;
+  if (follow && scroller) scroller.scrollTop = scroller.scrollHeight;
 }
 
 function render(s){
