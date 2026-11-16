@@ -6,9 +6,6 @@ import android.content.Intent;
 import android.content.pm.PackageInstaller;
 import android.os.Build;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -30,9 +27,21 @@ import java.nio.charset.StandardCharsets;
  */
 public final class Updater {
 
-    private static final String API =
-            "https://api.github.com/repos/2182977liu-bit/auto_phone_z/releases/latest";
+    /**
+     * 不走 api.github.com：未鉴权请求只有 60 次/小时，超了直接 403，
+     * 这就是"更新失败 GitHub 返回 HTTP 403"的真正原因。
+     * releases/latest/download/&lt;资产名&gt; 会 302 到静态 CDN，不消耗任何配额。
+     */
+    private static final String BASE =
+            "https://github.com/2182977liu-bit/auto_phone_z/releases/latest/download/";
+    private static final String VERSION_FILE = "version.txt";
+    private static final String APK_FILE = "app-debug.apk";
     private static final int TIMEOUT_MS = 15000;
+
+    /** Release 里 APK 的固定直链。 */
+    public static String apkUrl() {
+        return BASE + APK_FILE;
+    }
 
     public interface Progress {
         void onStatus(String msg);
@@ -44,53 +53,54 @@ public final class Updater {
     /**
      * 检查最新版本。
      *
-     * @return null 表示已是最新；否则返回 {versionName, apkUrl, sizeBytes}
+     * @return null 表示已是最新；否则返回远端的 versionName
      */
-    public static String[] checkLatest(String currentVersion) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(API).openConnection();
+    public static String checkLatest(String currentVersion) throws Exception {
+        String body = fetchText(BASE + VERSION_FILE);
+        String ver = firstLine(body);
+        if (ver.isEmpty()) {
+            throw new Exception("version.txt 内容为空");
+        }
+        if (compareVersion(ver, currentVersion) <= 0) {
+            return null;
+        }
+        return ver;
+    }
+
+    private static String fetchText(String url) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         try {
             c.setConnectTimeout(TIMEOUT_MS);
             c.setReadTimeout(TIMEOUT_MS);
-            c.setRequestProperty("Accept", "application/vnd.github+json");
+            c.setInstanceFollowRedirects(true);
+            c.setRequestProperty("Accept", "text/plain");
             c.setRequestProperty("User-Agent", "AutoPhoneZ-Updater");
             int code = c.getResponseCode();
-            if (code == 404) {
-                throw new Exception("仓库或 Release 不存在（HTTP 404）");
-            }
             if (code >= 400) {
-                throw new Exception("GitHub 返回 HTTP " + code);
-            }
-            JSONObject rel = new JSONObject(readAll(c.getInputStream()));
-            String tag = rel.optString("tag_name", "").trim();
-            if (tag.isEmpty()) {
-                throw new Exception("Release 缺少 tag_name");
-            }
-            String ver = (tag.startsWith("v") || tag.startsWith("V")) ? tag.substring(1) : tag;
-
-            String apkUrl = null;
-            long size = 0;
-            JSONArray assets = rel.optJSONArray("assets");
-            if (assets != null) {
-                for (int i = 0; i < assets.length(); i++) {
-                    JSONObject a = assets.getJSONObject(i);
-                    String name = a.optString("name", "");
-                    if (name.toLowerCase().endsWith(".apk")) {
-                        apkUrl = a.optString("browser_download_url", "");
-                        size = a.optLong("size", 0);
-                        break;
-                    }
+                String hint;
+                if (code == 403) {
+                    hint = "（被 GitHub 限流，稍后重试）";
+                } else if (code == 404) {
+                    hint = "（这个 Release 里没有 version.txt）";
+                } else {
+                    hint = "";
                 }
+                throw new Exception("HTTP " + code + hint);
             }
-            if (apkUrl == null || apkUrl.isEmpty()) {
-                throw new Exception("最新 Release 里没有 .apk 资产");
-            }
-            if (compareVersion(ver, currentVersion) <= 0) {
-                return null;
-            }
-            return new String[]{ver, apkUrl, String.valueOf(size)};
+            return readAll(c.getInputStream());
         } finally {
             c.disconnect();
         }
+    }
+
+    private static String firstLine(String s) {
+        for (String line : s.split("\r?\n")) {
+            String t = line.trim();
+            if (!t.isEmpty()) {
+                return t;
+            }
+        }
+        return "";
     }
 
     /** 下载 APK 到应用缓存目录，返回本地文件。 */

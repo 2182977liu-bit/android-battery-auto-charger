@@ -94,12 +94,25 @@ jobs:
           VN="${{ steps.ver.outputs.versionName }}"
           TAG="v$VN"
           APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          # App 靠 releases/latest/download/version.txt 判断版本，
+          # 走静态 CDN，不碰 api.github.com 的 60 次/小时配额。
+          printf '%s\n' "$VN" > version.txt
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" --clobber
+            gh release upload "$TAG" "$APK" version.txt --clobber
             echo "已更新已有 Release $TAG"
           else
-            gh release create "$TAG" "$APK" \
+            gh release create "$TAG" "$APK" version.txt \
               --title "AutoPhoneZ v$VN" \
               --notes "versionCode ${{ steps.ver.outputs.versionCode }} 自动构建"
             echo "已创建 Release $TAG"
           fi
+
+      - name: Verify direct links
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          BASE="https://github.com/${{ github.repository }}/releases/latest/download"
+          VN=$(curl -sL "$BASE/version.txt" | tr -d '\r\n ')
+          echo "latest/download/version.txt -> [$VN]"
+          curl -sL -o /tmp/check.apk "$BASE/app-debug.apk"
+          ls -l /tmp/check.apk

@@ -239,18 +239,17 @@ public class MainActivity extends Activity {
 
         new Thread(() -> {
             try {
-                String[] r = Updater.checkLatest(BuildConfig.VERSION_NAME);
-                if (r == null) {
+                String ver = Updater.checkLatest(BuildConfig.VERSION_NAME);
+                if (ver == null) {
                     LogBuf.add("已是最新版本");
                     if (manual) {
                         ui.post(() -> toast("已是最新版本"));
                     }
                     return;
                 }
-                final String ver = r[0];
                 LogBuf.add("发现新版本 v" + ver + "，开始下载");
-                File apk = Updater.download(MainActivity.this, r[1],
-                        Long.parseLong(r[2]), msg -> LogBuf.add(msg));
+                File apk = Updater.download(MainActivity.this, Updater.apkUrl(), 0,
+                        msg -> LogBuf.add(msg));
                 LogBuf.add("下载完成 " + apk.length() + " 字节，拉起安装器");
                 Updater.install(MainActivity.this, apk);
                 ui.post(() -> toast("已下载 v" + ver + "，请在安装页点「安装」"));
