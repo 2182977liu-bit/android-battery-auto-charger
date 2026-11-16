@@ -1,0 +1,12 @@
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# ESP32 真实配置不入库，CI 会从 config_example.h 复制
+esp32/include/config.h
+esp32/.pio/
+esp32/.vscode/

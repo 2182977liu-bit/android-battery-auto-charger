@@ -1,0 +1,52 @@
+name: build-esp32
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'esp32/**'
+      - '.github/workflows/build-esp32.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('esp32/platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install -U platformio
+
+      # config.h 含密钥不入库，用示例值编译，验证代码本身能过编译
+      - name: Prepare config.h
+        working-directory: esp32
+        run: cp include/config_example.h include/config.h
+
+      - name: Build firmware
+        working-directory: esp32
+        run: pio run
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoPhoneZ-esp32s3-firmware
+          path: esp32/.pio/build/*/firmware.bin
+          retention-days: 90
+
+      - name: Summary
+        run: |
+          echo "### ESP32-S3 固件构建完成（注意：用的是 config_example.h 的占位 WiFi/Token）" >> $GITHUB_STEP_SUMMARY
+          echo "正式烧录前请在本地改成真实 config.h 再 pio run -t upload" >> $GITHUB_STEP_SUMMARY
+          ls -lh esp32/.pio/build/*/firmware.bin >> $GITHUB_STEP_SUMMARY || true
