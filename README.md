@@ -68,6 +68,24 @@
 
 签名固定这件事很关键：debug keystore 提交在 `keystore/debug.keystore`（密码 `android`，公开的调试密钥），所以每次 CI 产出的 APK 签名一致，`adb install -r` 可以直接覆盖，不会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`。
 
+## 三·五、App 自动更新
+
+仓库是 public，App 打开 3 秒后静默查一次 `releases/latest`，界面上的「检查更新」也可以手动触发：
+
+1. 取 `tag_name`（形如 `v1.1`）与自身 `versionName` 比较
+2. 有新版就下载 Release 里第一个 `.apk`（30 KB 上下，秒下）
+3. 交给 `PackageInstaller`，系统弹安装确认页，点「安装」
+
+**最后一步必须手点**——普通 App 没有静默安装权限，这是 Android 的硬限制，不是没做完。全自动需要手机 root 或 Device Owner 模式。
+
+几个前提：
+
+- 首次仍需手动装一次：v1.0 里没有更新代码，装上 v1.1 之后才具备自动更新能力
+- 要在系统设置里给本应用打开「安装未知应用」，否则 `PackageInstaller` 直接失败（App 会提示并跳到设置页）
+- 未鉴权的 GitHub API 限 60 次/小时/IP，每台手机每次启动查一次，完全够用
+
+CI 自动发版：改完 `versionName` 直接 push，workflow 会读 `app/build.gradle.kts`，建 `v<versionName>` 的 Release 并上传 APK。App 下次启动就能看到。
+
 ## 四、装到手机
 
 ```bash
@@ -241,7 +259,9 @@ CI 与协议层面已跑通并核对：
 
 | 项 | 结果 |
 |---|---|
-| `build-android` | ✅ 通过，产出 23.9 KB APK |
+| `build-android` | ✅ 通过，v1.0 产出 23.9 KB APK；v1.1（含自动更新）31.1 KB |
+| 自动更新链路 | ✅ Release `v1.1` 已发布，`releases/latest` 免鉴权能取到 `app-debug.apk`（31,171 字节） |
+| CI 自动发版 | ✅ 读完 `versionName` 后自动建 `v1.1` Release 并上传 APK |
 | APK 签名 | ✅ 含 APK Signing Block（AGP 8 对 minSdk 24 默认只签 v2/v3，`META-INF` 里没有 CERT.RSA 属正常） |
 | APK 内容 | ✅ `classes2.dex` 内含 `BatteryMonitorService` / `MainActivity` / `HttpPush` / `Payload` / `BootReceiver` |
 | `build-esp32` | ✅ 通过，产出 `firmware.bin`（约 490 KB） |
