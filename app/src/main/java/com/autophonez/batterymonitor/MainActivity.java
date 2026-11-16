@@ -14,9 +14,11 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -35,6 +37,8 @@ public class MainActivity extends Activity {
     private TextView tvStatus;
     private TextView tvLog;
     private TextView tvVersion;
+    private ScrollView svLog;
+    private String lastLogText = "";
 
     private final Handler ui = new Handler(Looper.getMainLooper());
 
@@ -44,7 +48,7 @@ public class MainActivity extends Activity {
             SharedPreferences p = Config.prefs(MainActivity.this);
             boolean running = p.getBoolean(Config.KEY_RUNNING, false);
             tvStatus.setText(running ? "● 服务运行中" : "○ 服务已停止");
-            tvLog.setText(LogBuf.dump());
+            appendLogTail();
             ui.postDelayed(this, 1000L);
         }
     };
@@ -65,6 +69,7 @@ public class MainActivity extends Activity {
         tvStatus = findViewById(R.id.tvStatus);
         tvLog = findViewById(R.id.tvLog);
         tvVersion = findViewById(R.id.tvVersion);
+        svLog = findViewById(R.id.svLog);
 
         loadConfigToUi();
 
@@ -272,6 +277,27 @@ public class MainActivity extends Activity {
             startActivity(i);
         } catch (Exception e) {
             toast("请手动到系统设置里允许「安装未知应用」");
+        }
+    }
+
+    /**
+     * 日志框高度固定（180dp），超出后在框内滚动，不再把整个页面撑长。
+     * 有新内容时自动滚到底；用户正在往上翻历史就不打扰，
+     * 等他回到底部附近再恢复跟随。
+     */
+    private void appendLogTail() {
+        String text = LogBuf.dump();
+        if (text.equals(lastLogText)) {
+            return;
+        }
+        lastLogText = text;
+
+        View child = svLog.getChildAt(0);
+        boolean follow = child == null
+                || child.getHeight() - svLog.getHeight() - svLog.getScrollY() < 40;
+        tvLog.setText(text);
+        if (follow) {
+            svLog.post(() -> svLog.fullScroll(View.FOCUS_DOWN));
         }
     }
 

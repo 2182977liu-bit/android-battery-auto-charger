@@ -239,12 +239,22 @@
             android:textSize="14sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/tvLog"
+        <ScrollView
+            android:id="@+id/svLog"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="180dp"
             android:layout_marginTop="8dp"
-            android:fontFamily="monospace"
-            android:textSize="11sp" />
+            android:background="#1b1b1b"
+            android:padding="8dp"
+            android:scrollbars="vertical">
+
+            <TextView
+                android:id="@+id/tvLog"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:textColor="#d0d0d0"
+                android:textSize="11sp" />
+        </ScrollView>
     </LinearLayout>
 </ScrollView>
