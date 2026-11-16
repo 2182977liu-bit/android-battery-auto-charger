@@ -136,18 +136,58 @@ pio device monitor
 
 ## 六、没有硬件时先验证链路
 
-`tools/sim_server.py` 是固件的等价实现，跑在电脑上：
+有两条路，推荐先用**网页版**，更直观。
+
+### 6.1 网页查看端（推荐，可视化）
+
+在局域网内任意一台电脑（Windows/macOS/Linux 都行）上跑，单文件、零依赖：
+
+```bash
+python tools/web_dashboard.py                 # 端口 8080，Token test-token-123456
+python tools/web_dashboard.py 9000 mytoken    # 自定义端口和 Token
+```
+
+启动后终端会打印本机局域网 IP，**手机 App 里填这个 IP + 端口 + 同一个 Token**。
+
+浏览器打开 `http://<电脑IP>:8080/` 能看到：
+
+| 区域 | 内容 |
+|---|---|
+| 圆环 | 当前电量（≤30% 变橙、≥90% 变绿），充电状态 |
+| 卡片 | 机型、设备 ID、Android 版本、供电方式、温度、电压、最后事件、最后上报时间、累计报文数 |
+| 统计卡 | 低电量/高电量触发次数、插拔触发次数、**继电器模拟状态**（如果接了 ESP32 会怎样） |
+| 电量曲线 | 只记录变化点，带 30%/90% 阈值虚线 |
+| 事件流 | 最近 30 条，带颜色区分事件类型和来源 IP |
+| 底部 | 直接告诉你手机该填什么 IP/端口/Token |
+
+页面每秒自动刷新；左下角「模拟发送一条」按钮可以在没有手机时验证面板本身。
+
+`WebServer` 的接口与固件完全一致：`POST /battery`（带 `X-Auth-Token`）、`GET /status`。
+
+> Windows 首次运行会弹防火墙提示，**必须勾选「专用网络」并允许**，否则手机连不进来。
+> 这个页面只用于局域网测试，不要映射到公网——Token 是明文显示在页面上的。
+
+#### 怎么用它判断「软件到底能不能用」
+
+按这个顺序看，每一步都能定位问题：
+
+1. App 点「保存并启动」后，网页应**立刻**出现一条 `HELLO` → 链路通了，Token 和 IP 都对
+2. 点 App 的「测试发送」，网页出现 `TEST` → 双向可达
+3. `adb shell dumpsys battery set level 20` → 网页出现 `LOW_BATTERY`，圆环变橙，模拟继电器变 ON
+4. `dumpsys battery set ac 1` → 出现 `PLUGGED`；`unplug` → `UNPLUGGED`
+5. `dumpsys battery set level 91` → 出现 `HIGH_BATTERY`，模拟继电器变 OFF
+6. 什么都不做等 5 分钟 → 应出现 `HEARTBEAT`，说明**后台没被系统杀掉**
+7. 如果超过 6.5 分钟没有任何报文 → 顶部徽章变黄（`数据延迟`），超过 15 分钟变红（`离线`）
+   —— 这就是 ROM 后台清理的典型症状，去按第四节那四项设置
+
+### 6.2 终端版模拟接收端
 
 ```bash
 python3 tools/sim_server.py          # 默认 8080 / test-token-123456
 python3 tools/sim_server.py 9000 mytoken   # 指定端口和 token
 ```
 
-启动会打印本机局域网 IP，把它填进 App，点「测试发送」即可看到：
-
-```
-[20:31:07] [EVT] TEST         dev=phoneA model=Xiaomi 23127PN0CC level=45% chg=1 ...
-```
+只在终端打日志，适合在服务器上跑着看。功能与网页版一致（同样的协议、同样的继电器模拟逻辑）。
 
 ## 七、验证闭环（不用真的等电量掉下去）
 
