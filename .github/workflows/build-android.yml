@@ -12,6 +12,9 @@ on:
       - '.github/workflows/build-android.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -69,3 +72,34 @@ jobs:
           ls -lh app/build/outputs/apk/debug/ >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "到当前 run 页面底部 Artifacts 区下载 AutoPhoneZ-debug-apk" >> $GITHUB_STEP_SUMMARY
+
+      # 自动发版：tag 用 versionName，App 端就是拿这个 tag 比版本的。
+      # App 会请求 releases/latest 找 .apk 资产，所以这里必须传 APK 上去。
+      - name: Read version
+        id: ver
+        shell: bash
+        run: |
+          VN=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
+          VC=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts | head -1)
+          echo "versionName=$VN" >> "$GITHUB_OUTPUT"
+          echo "versionCode=$VC" >> "$GITHUB_OUTPUT"
+          echo "读取到 versionName=$VN versionCode=$VC"
+
+      - name: Publish Release
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VN="${{ steps.ver.outputs.versionName }}"
+          TAG="v$VN"
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+            echo "已更新已有 Release $TAG"
+          else
+            gh release create "$TAG" "$APK" \
+              --title "AutoPhoneZ v$VN" \
+              --notes "versionCode ${{ steps.ver.outputs.versionCode }} 自动构建"
+            echo "已创建 Release $TAG"
+          fi

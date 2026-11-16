@@ -10,8 +10,8 @@ android {
         applicationId = "com.autophonez.batterymonitor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     // 固定 debug 签名：仓库内自带的 keystore，保证每次 CI 产出的 APK
@@ -33,6 +33,12 @@ android {
         getByName("release") {
             isMinifyEnabled = false
         }
+    }
+
+    // AGP 8 起 buildConfig 默认关闭，自动更新要读 BuildConfig.VERSION_NAME，
+    // 不开这个开关会直接编译失败。
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {

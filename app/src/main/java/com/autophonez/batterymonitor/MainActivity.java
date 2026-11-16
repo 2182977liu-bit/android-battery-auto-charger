@@ -20,6 +20,8 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.File;
+
 public class MainActivity extends Activity {
 
     private EditText etHost;
@@ -32,6 +34,7 @@ public class MainActivity extends Activity {
     private CheckBox cbBoot;
     private TextView tvStatus;
     private TextView tvLog;
+    private TextView tvVersion;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
 
@@ -61,6 +64,7 @@ public class MainActivity extends Activity {
         cbBoot = findViewById(R.id.cbBoot);
         tvStatus = findViewById(R.id.tvStatus);
         tvLog = findViewById(R.id.tvLog);
+        tvVersion = findViewById(R.id.tvVersion);
 
         loadConfigToUi();
 
@@ -74,8 +78,16 @@ public class MainActivity extends Activity {
         btnTest.setOnClickListener(v -> testSend());
         btnBattery.setOnClickListener(v -> requestIgnoreBatteryOptimization());
 
+        Button btnUpdate = findViewById(R.id.btnUpdate);
+        btnUpdate.setOnClickListener(v -> checkUpdate(true));
+
         requestNotificationPermission();
         ui.post(refresher);
+
+        tvVersion.setText("当前 v" + BuildConfig.VERSION_NAME
+                + "（" + BuildConfig.VERSION_CODE + "）");
+        // 打开界面后静默检查一次，失败只在日志里留一行，不弹窗打扰
+        ui.postDelayed(() -> checkUpdate(false), 3000L);
     }
 
     @Override
@@ -205,6 +217,61 @@ public class MainActivity extends Activity {
             } catch (Exception e2) {
                 toast("请手动到系统设置里关闭电池优化");
             }
+        }
+    }
+
+    // ------------------------------------------------------------ 自动更新
+
+    /**
+     * 检查 GitHub 最新版本。manual=false 时是启动静默检查，
+     * 只写日志不弹提示；manual=true 是用户主动点「检查更新」。
+     */
+    private void checkUpdate(boolean manual) {
+        if (manual) {
+            toast("正在检查更新…");
+        }
+        LogBuf.add("检查更新 v" + BuildConfig.VERSION_NAME);
+
+        new Thread(() -> {
+            try {
+                String[] r = Updater.checkLatest(BuildConfig.VERSION_NAME);
+                if (r == null) {
+                    LogBuf.add("已是最新版本");
+                    if (manual) {
+                        ui.post(() -> toast("已是最新版本"));
+                    }
+                    return;
+                }
+                final String ver = r[0];
+                LogBuf.add("发现新版本 v" + ver + "，开始下载");
+                File apk = Updater.download(MainActivity.this, r[1],
+                        Long.parseLong(r[2]), msg -> LogBuf.add(msg));
+                LogBuf.add("下载完成 " + apk.length() + " 字节，拉起安装器");
+                Updater.install(MainActivity.this, apk);
+                ui.post(() -> toast("已下载 v" + ver + "，请在安装页点「安装」"));
+            } catch (Exception e) {
+                final String m = e.getMessage() == null ? e.toString() : e.getMessage();
+                LogBuf.add("更新失败：" + m);
+                if (m.contains("安装未知应用")) {
+                    ui.post(this::openUnknownSourcesSettings);
+                }
+                if (manual) {
+                    ui.post(() -> toast("更新失败：" + m));
+                }
+            }
+        }).start();
+    }
+
+    private void openUnknownSourcesSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+        try {
+            Intent i = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + getPackageName()));
+            startActivity(i);
+        } catch (Exception e) {
+            toast("请手动到系统设置里允许「安装未知应用」");
         }
     }
 
