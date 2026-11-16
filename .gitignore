@@ -13,3 +13,6 @@ esp32/.vscode/
 
 # 本地下载的构建产物
 dist/
+
+__pycache__/
+*.pyc
