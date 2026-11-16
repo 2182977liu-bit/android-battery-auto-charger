@@ -33,7 +33,7 @@ public final class Updater {
      * releases/latest/download/&lt;资产名&gt; 会 302 到静态 CDN，不消耗任何配额。
      */
     private static final String BASE =
-            "https://github.com/2182977liu-bit/auto_phone_z/releases/latest/download/";
+            "https://github.com/2182977liu-bit/android-battery-auto-charger/releases/latest/download/";
     private static final String VERSION_FILE = "version.txt";
     private static final String APK_FILE = "app-debug.apk";
     private static final int TIMEOUT_MS = 15000;
