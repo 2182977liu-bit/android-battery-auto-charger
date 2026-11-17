@@ -15,6 +15,11 @@ AutoPhoneZ 局域网网页查看端 · 多设备版（测试用）
     POST /api/reset     清空所有数据重新开始
     POST /api/token     网页上修改上报 Token（body: {"token":"..."}）
 
+管理端 App 用的三条接口（与《ESP32接口说明.md》一致，ESP32 未来照此实现）：
+    GET  /devices            拉取全部设备状态 + 各自阈值/通道
+    POST /devices/config     下发某台设备的阈值与继电器通道
+    POST /devices/relay      手动强制通/断，或 {"auto":true} 恢复自动
+
 多设备靠 device_id 区分：每台手机在自己的 App 里填不同的设备 ID，
 接收端按 device_id 各存一份状态、各自的曲线和统计，互不覆盖。
 
@@ -96,20 +101,38 @@ def new_device(dev_id: str) -> dict:
         "high_hits": 0,
         "plug_hits": 0,
         "relay": False,
+        "low_th": LOW,
+        "high_th": HIGH,
+        "channel": -1,      # 绑定的继电器通道，-1 = 不控制
+        "manual": False,    # 手动覆盖状态
         "history": [],
         "last_ip": "-",
     }
 
 
 def apply_thresholds(dev: dict, level: int) -> bool:
-    """与 ESP32 固件一致的控制逻辑，这里只用于面板上展示「假想继电器」。"""
+    """与 ESP32 固件一致的控制逻辑，这里只用于面板上展示「假想继电器」。
+
+    每台设备用**自己的**阈值，手动覆盖（manual）优先级最高。
+    """
+    if dev.get("manual"):
+        return dev["relay"]
     if level < 0:
         return dev["relay"]
-    if level <= LOW:
+    if level <= dev.get("low_th", LOW):
         return True
-    if level >= HIGH:
+    if level >= dev.get("high_th", HIGH):
         return False
     return dev["relay"]
+
+
+def pick_channel() -> int:
+    """新设备自动分配一个还没被占用的通道（0~3），分完为止返回 -1。"""
+    used = {d.get("channel", -1) for d in STATE["devices"].values()}
+    for ch in range(4):
+        if ch not in used:
+            return ch
+    return -1
 
 
 def record(data: dict, ip: str, simulated: bool = False) -> str:
@@ -122,6 +145,7 @@ def record(data: dict, ip: str, simulated: bool = False) -> str:
         dev = STATE["devices"].get(dev_id)
         if dev is None:
             dev = new_device(dev_id)
+            dev["channel"] = pick_channel()
             STATE["devices"][dev_id] = dev
 
         prev_relay = dev["relay"]
@@ -195,6 +219,10 @@ def snapshot() -> dict:
                 "volt": dev["volt"],
                 "event": dev["last_event"],
                 "relay": dev["relay"],
+                "low_th": dev["low_th"],
+                "high_th": dev["high_th"],
+                "channel": dev["channel"],
+                "manual": dev["manual"],
                 "age_sec": age,
                 "count": dev["count"],
                 "low_hits": dev["low_hits"],
@@ -668,6 +696,35 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, render_html(), "text/html; charset=utf-8")
         elif path == "/api/state":
             self._json(200, snapshot())
+        elif path == "/devices":
+            if self.headers.get("X-Auth-Token") != TOKEN:
+                return self._json(401, {"ok": False, "err": "bad_token"})
+            s = snapshot()
+            devs = []
+            for d in s["devices"]:
+                age = d["age_sec"]
+                devs.append({
+                    "device_id": d["id"],
+                    "model": d["model"],
+                    "android": d["android"],
+                    "level": d["level"],
+                    "charging": d["charging"],
+                    "plugged": d["plugged"],
+                    "temp_c": d["temp"],
+                    "voltage_mv": d["volt"],
+                    "event": d["event"],
+                    "age_sec": age if age is not None else -1,
+                    "online": age is not None and age < BAD_AFTER_SEC,
+                    "count": d["count"],
+                    "last_ip": d["last_ip"],
+                    "low_th": d["low_th"],
+                    "high_th": d["high_th"],
+                    "relay": d["channel"],
+                    "relay_on": d["relay"],
+                    "manual": d["manual"],
+                })
+            return self._json(200, {"ok": True, "server_time": int(time.time()),
+                                    "devices": devs})
         elif path == "/status":
             s = snapshot()
             devs = [{
@@ -742,6 +799,74 @@ class Handler(BaseHTTPRequestHandler):
             }
             record(fake, "127.0.0.1", simulated=True)
             return self._json(200, {"ok": True})
+
+        if path == "/devices/config":
+            if self.headers.get("X-Auth-Token") != TOKEN:
+                return self._json(401, {"ok": False, "err": "bad_token"})
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(length) if length else b""
+            try:
+                data = json.loads(raw or b"{}")
+                dev_id = str(data.get("device_id", "")).strip()
+                low = int(data.get("low_th"))
+                high = int(data.get("high_th"))
+                channel = int(data.get("relay", -1))
+            except Exception:
+                return self._json(400, {"ok": False, "err": "bad_threshold"})
+            if not dev_id:
+                return self._json(400, {"ok": False, "err": "bad_device_id"})
+            if not (5 <= low <= 60) or not (50 <= high <= 100) or low >= high:
+                return self._json(400, {"ok": False, "err": "bad_threshold"})
+            if channel < -1 or channel > 3:
+                return self._json(400, {"ok": False, "err": "bad_channel"})
+            with LOCK:
+                dev = STATE["devices"].get(dev_id)
+                if dev is None:
+                    dev = new_device(dev_id)
+                    STATE["devices"][dev_id] = dev
+                dev["low_th"] = low
+                dev["high_th"] = high
+                dev["channel"] = channel
+                dev["manual"] = False
+                dev["relay"] = apply_thresholds(dev, dev["level"])
+                relay_on = dev["relay"]
+            print(f"[{now_str()}] [配置] {dev_id} 阈值 {low}/{high} 通道 {channel}")
+            return self._json(200, {"ok": True, "device_id": dev_id,
+                                    "low_th": low, "high_th": high,
+                                    "relay": channel, "relay_on": relay_on})
+
+        if path == "/devices/relay":
+            if self.headers.get("X-Auth-Token") != TOKEN:
+                return self._json(401, {"ok": False, "err": "bad_token"})
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(length) if length else b""
+            try:
+                data = json.loads(raw or b"{}")
+                dev_id = str(data.get("device_id", "")).strip()
+            except Exception:
+                return self._json(400, {"ok": False, "err": "bad_json"})
+            if not dev_id:
+                return self._json(400, {"ok": False, "err": "bad_device_id"})
+            with LOCK:
+                dev = STATE["devices"].get(dev_id)
+                if dev is None:
+                    return self._json(404, {"ok": False, "err": "unknown_device"})
+                if data.get("auto"):
+                    dev["manual"] = False
+                    dev["relay"] = apply_thresholds(dev, dev["level"])
+                else:
+                    if "on" not in data:
+                        return self._json(400, {"ok": False, "err": "bad_request"})
+                    dev["manual"] = True
+                    dev["relay"] = bool(data.get("on"))
+                relay_on = dev["relay"]
+                manual = dev["manual"]
+                channel = dev["channel"]
+            print(f"[{now_str()}] [手动] {dev_id} "
+                  f"{'恢复自动' if not manual else ('强制ON' if relay_on else '强制OFF')}")
+            return self._json(200, {"ok": True, "device_id": dev_id,
+                                    "relay": channel, "relay_on": relay_on,
+                                    "manual": manual})
 
         if path != "/battery":
             return self._json(404, {"ok": False, "err": "not_found"})

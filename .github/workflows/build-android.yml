@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'app/**'
+      - 'manager/**'
       - 'keystore/**'
       - 'settings.gradle.kts'
       - 'build.gradle.kts'
@@ -56,22 +57,33 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Build debug APK
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      - name: Build debug APKs
+        run: gradle :app:assembleDebug :manager:assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Upload phone APK
         uses: actions/upload-artifact@v4
         with:
           name: AutoPhoneZ-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 90
 
+      - name: Upload manager APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoPhoneZ-manager-apk
+          path: manager/build/outputs/apk/debug/*.apk
+          retention-days: 90
+
       - name: Summary
         run: |
           echo "### APK 构建完成" >> $GITHUB_STEP_SUMMARY
+          echo "**上报端（电量哨兵）**" >> $GITHUB_STEP_SUMMARY
           ls -lh app/build/outputs/apk/debug/ >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "到当前 run 页面底部 Artifacts 区下载 AutoPhoneZ-debug-apk" >> $GITHUB_STEP_SUMMARY
+          echo "**管理端（充电管理台）**" >> $GITHUB_STEP_SUMMARY
+          ls -lh manager/build/outputs/apk/debug/ >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "到当前 run 页面底部 Artifacts 区下载" >> $GITHUB_STEP_SUMMARY
 
       # 自动发版：tag 用 versionName，App 端就是拿这个 tag 比版本的。
       # App 会请求 releases/latest 找 .apk 资产，所以这里必须传 APK 上去。
@@ -81,9 +93,11 @@ jobs:
         run: |
           VN=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
           VC=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts | head -1)
+          MVN=$(grep -oP 'versionName\s*=\s*"\K[^"]+' manager/build.gradle.kts | head -1)
           echo "versionName=$VN" >> "$GITHUB_OUTPUT"
           echo "versionCode=$VC" >> "$GITHUB_OUTPUT"
-          echo "读取到 versionName=$VN versionCode=$VC"
+          echo "managerVersion=$MVN" >> "$GITHUB_OUTPUT"
+          echo "读取到 versionName=$VN versionCode=$VC managerVersion=$MVN"
 
       - name: Publish Release
         if: github.ref == 'refs/heads/main'
@@ -92,18 +106,22 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VN="${{ steps.ver.outputs.versionName }}"
+          MVN="${{ steps.ver.outputs.managerVersion }}"
           TAG="v$VN"
           APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          MAPK=$(ls manager/build/outputs/apk/debug/*.apk | head -1)
           # App 靠 releases/latest/download/version.txt 判断版本，
           # 走静态 CDN，不碰 api.github.com 的 60 次/小时配额。
           printf '%s\n' "$VN" > version.txt
+          # 管理端目前不做自动更新，version 文件只用于核对版本。
+          printf '%s\n' "$MVN" > manager-version.txt
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" version.txt --clobber
+            gh release upload "$TAG" "$APK" version.txt "$MAPK" manager-version.txt --clobber
             echo "已更新已有 Release $TAG"
           else
-            gh release create "$TAG" "$APK" version.txt \
+            gh release create "$TAG" "$APK" version.txt "$MAPK" manager-version.txt \
               --title "AutoPhoneZ v$VN" \
-              --notes "versionCode ${{ steps.ver.outputs.versionCode }} 自动构建"
+              --notes "上报端 versionCode ${{ steps.ver.outputs.versionCode }}，管理端 v$MVN，自动构建"
             echo "已创建 Release $TAG"
           fi
 
@@ -116,3 +134,7 @@ jobs:
           echo "latest/download/version.txt -> [$VN]"
           curl -sL -o /tmp/check.apk "$BASE/app-debug.apk"
           ls -l /tmp/check.apk
+          MVN=$(curl -sL "$BASE/manager-version.txt" | tr -d '\r\n ')
+          echo "latest/download/manager-version.txt -> [$MVN]"
+          curl -sL -o /tmp/manager.apk "$BASE/manager-debug.apk"
+          ls -l /tmp/manager.apk

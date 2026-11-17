@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "AutoPhoneZ"
 include(":app")
+include(":manager")
