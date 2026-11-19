@@ -261,6 +261,19 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="绑定继电器通道（ESP32 按上面的阈值控制这一路）"
+                android:textColor="@color/sub"
+                android:textSize="12sp" />
+
+            <Spinner
+                android:id="@+id/spRelay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
             <CheckBox
                 android:id="@+id/cbBoot"
                 android:layout_width="match_parent"

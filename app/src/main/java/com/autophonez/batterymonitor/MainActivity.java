@@ -16,10 +16,12 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -34,6 +36,7 @@ public class MainActivity extends Activity {
     private EditText etLow;
     private EditText etHigh;
     private EditText etHeartbeat;
+    private Spinner spRelay;
     private CheckBox cbBoot;
     private TextView tvStatus;
     private TextView tvLog;
@@ -41,6 +44,12 @@ public class MainActivity extends Activity {
     private ScrollView svLog;
     private String lastLogText = "";
     private float logTouchY;
+
+    /** 下标 0 = 不绑定（relay=-1），下标 n = 通道 n-1。 */
+    private static final String[] RELAY_OPTIONS = {
+            "不绑定（只上报）", "通道 0", "通道 1", "通道 2", "通道 3",
+            "通道 4", "通道 5", "通道 6", "通道 7"
+    };
 
     private final Handler ui = new Handler(Looper.getMainLooper());
 
@@ -68,6 +77,11 @@ public class MainActivity extends Activity {
         etLow = findViewById(R.id.etLow);
         etHigh = findViewById(R.id.etHigh);
         etHeartbeat = findViewById(R.id.etHeartbeat);
+        spRelay = findViewById(R.id.spRelay);
+        ArrayAdapter<String> relayAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, RELAY_OPTIONS);
+        relayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spRelay.setAdapter(relayAdapter);
         cbBoot = findViewById(R.id.cbBoot);
         tvStatus = findViewById(R.id.tvStatus);
         tvLog = findViewById(R.id.tvLog);
@@ -123,6 +137,7 @@ public class MainActivity extends Activity {
         etLow.setText(String.valueOf(c.low));
         etHigh.setText(String.valueOf(c.high));
         etHeartbeat.setText(String.valueOf(c.heartbeatMin));
+        spRelay.setSelection(Math.max(0, Math.min(RELAY_OPTIONS.length - 1, c.relay + 1)));
         cbBoot.setChecked(c.bootStart);
     }
 
@@ -147,12 +162,14 @@ public class MainActivity extends Activity {
         e.putString(Config.KEY_LOW, etLow.getText().toString().trim());
         e.putString(Config.KEY_HIGH, etHigh.getText().toString().trim());
         e.putString(Config.KEY_HEARTBEAT_MIN, etHeartbeat.getText().toString().trim());
+        e.putString(Config.KEY_RELAY, String.valueOf(spRelay.getSelectedItemPosition() - 1));
         e.putBoolean(Config.KEY_BOOT_START, cbBoot.isChecked());
         e.apply();
 
         Config c = Config.load(this);
         LogBuf.add("配置已保存 " + c.host + ":" + c.port + " 阈值 " + c.low + "/" + c.high
-                + "% 心跳 " + c.heartbeatMin + "min");
+                + "% 心跳 " + c.heartbeatMin + "min"
+                + (c.relay >= 0 ? " 继电器通道 " + c.relay : " 未绑定继电器"));
         return true;
     }
 

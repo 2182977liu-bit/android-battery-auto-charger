@@ -109,6 +109,8 @@ public class BatteryMonitorService extends Service {
     // ---------------------------------------------------------------- 状态机
 
     private void handleState(BatteryState st) {
+        // 每次广播都重读配置：App 里改了阈值/绑定通道，不用重启服务就生效
+        cfg = Config.load(this);
         if (last == null) {
             // 首次（注册 sticky 广播时立即回吐当前值）：只发 HELLO，
             // 但要把闸门摆到正确位置，避免下一次重复触发。

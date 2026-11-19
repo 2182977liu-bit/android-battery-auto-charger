@@ -14,6 +14,7 @@ public final class Config {
     public static final String KEY_DEVICE_ID = "device_id";
     public static final String KEY_LOW = "low";
     public static final String KEY_HIGH = "high";
+    public static final String KEY_RELAY = "relay";
     public static final String KEY_HEARTBEAT_MIN = "hb_min";
     public static final String KEY_BOOT_START = "boot_start";
     public static final String KEY_RUNNING = "running";
@@ -24,17 +25,20 @@ public final class Config {
     public final String deviceId;
     public final int low;
     public final int high;
+    /** 绑定的继电器通道号，-1 表示不绑定（只上报，不参与控制）。 */
+    public final int relay;
     public final int heartbeatMin;
     public final boolean bootStart;
 
     private Config(String host, int port, String token, String deviceId,
-                   int low, int high, int heartbeatMin, boolean bootStart) {
+                   int low, int high, int relay, int heartbeatMin, boolean bootStart) {
         this.host = host;
         this.port = port;
         this.token = token;
         this.deviceId = deviceId;
         this.low = low;
         this.high = high;
+        this.relay = relay;
         this.heartbeatMin = heartbeatMin;
         this.bootStart = bootStart;
     }
@@ -52,9 +56,10 @@ public final class Config {
         if (deviceId.isEmpty()) deviceId = "phoneA";
         int low = clamp(parseInt(p.getString(KEY_LOW, "30"), 30), 5, 80);
         int high = clamp(parseInt(p.getString(KEY_HIGH, "90"), 90), low + 5, 100);
+        int relay = clamp(parseInt(p.getString(KEY_RELAY, "-1"), -1), -1, 15);
         int hb = clamp(parseInt(p.getString(KEY_HEARTBEAT_MIN, "5"), 5), 0, 180);
         boolean boot = p.getBoolean(KEY_BOOT_START, true);
-        return new Config(host, port, token, deviceId, low, high, hb, boot);
+        return new Config(host, port, token, deviceId, low, high, relay, hb, boot);
     }
 
     /** host / token 都必须填，否则拒绝发送，避免把数据发到错误的地方。 */

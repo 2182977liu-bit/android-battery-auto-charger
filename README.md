@@ -32,17 +32,22 @@
 | 只想先看看数据，没有硬件 | 用**网页查看端**，电脑上跑一个 Python 文件 | 3 分钟 |
 | 想让手机真的自动充电 | 需要 **ESP32-S3 + 继电器模块**（十几块） | 半小时 |
 | 不想买硬件，但想手机自己控制 | 面板可跑在手机上的 Linux 容器（Podroid），见 [`手机端部署速查.md`](手机端部署速查.md) | 20 分钟 |
-| 想测试 ESP32 的继电器开关 | 装**管理端 App（充电管理台）**，接口见 [`ESP32接口说明.md`](ESP32接口说明.md) | 2 分钟 |
+| 想测试 ESP32 的继电器开关 | 装**测试充电 App**（继电器测试工具），接口见 [`ESP32接口说明.md`](ESP32接口说明.md) | 2 分钟 |
 
 ### 0.1 下载 App
 
 | App | 装在哪 | 下载 |
 |---|---|---|
 | **电量哨兵**（上报端） | 每台要监控的手机 | [app-debug.apk（约 35 KB）](https://github.com/2182977liu-bit/android-battery-auto-charger/releases/latest/download/app-debug.apk) |
-| **充电管理台**（管理端，继电器测试） | 你自己随身用的手机/平板 | [manager-debug.apk](https://github.com/2182977liu-bit/android-battery-auto-charger/releases/latest/download/manager-debug.apk) |
+| **测试充电**（继电器测试工具） | 你自己随身用的手机/平板 | [manager-debug.apk](https://github.com/2182977liu-bit/android-battery-auto-charger/releases/latest/download/manager-debug.apk) |
 
 装好后在系统设置里给「电量哨兵」打开「安装未知应用」，之后 App 会自己检查更新，只需点一次「安装」。
-管理端目前不做自动更新，有新版本重新下载安装即可。
+「测试充电」目前不做自动更新，有新版本重新下载安装即可。
+
+**充电区间和继电器绑定都在「电量哨兵」里设置**（v1.7 起）：
+打开 App →「阈值与心跳」卡片里填低/高电量百分比 → 下方「绑定继电器通道」选通道 0~7 → 保存并启动。
+每条上报报文都会带上 `low_th`、`high_th`、`relay` 三个字段，ESP32 按它们决定哪一路、什么时候通断。
+选「不绑定」就只上报数据，不占用继电器。
 
 ### 0.2 三分钟跑通（不需要任何硬件）
 
@@ -398,6 +403,8 @@ CI 与协议层面已跑通并核对：
 | v1.3 | 自动更新改走静态直链，修复 403 限流 |
 | v1.4 | UI 重做：卡片分组、青绿主色、去 ActionBar |
 | v1.5 | 修复日志框嵌套滚动冲突，可正常上下滑动 |
+| v1.6 | 同一 Release 开始附带第二个 APK（继电器测试工具，现名「测试充电」） |
+| v1.7 | 上报端新增「绑定继电器通道」选择；阈值/通道随报文上报（`low_th`/`high_th`/`relay`）；改配置后无需重启服务即生效 |
 
 ## 十二、License
 

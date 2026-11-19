@@ -77,6 +77,7 @@ Content-Type: application/json
   "temp_c": 30.5,
   "low_th": 30,
   "high_th": 90,
+  "relay": 0,
   "ts": 1763350000
 }
 ```
@@ -94,7 +95,14 @@ Content-Type: application/json
 | `plugged` | string | `AC` / `USB` / `WIRELESS` / `UNPLUGGED` |
 | `voltage_mv` | int | 电池电压 mV |
 | `temp_c` | float | 电池温度 ℃ |
+| `low_th` | int | 低电量阈值 %，**上报端 App 里设置**，低于它该充电 |
+| `high_th` | int | 高电量阈值 %，**上报端 App 里设置**，达到它该断电 |
+| `relay` | int | 绑定的继电器通道号，**上报端 App 里选择**；`-1` = 不绑定（只上报不控制） |
 | `ts` | long | 手机侧 Unix 秒 |
+
+> 上报端 v1.7 起，充电区间（`low_th`/`high_th`）和绑定通道（`relay`）都在手机 App 里设置，
+> 随每条报文一起上报。ESP32 收到后按 `relay` 找到对应 GPIO，用 `level` 与阈值比较决定通断；
+> `relay = -1` 的设备只记录数据，不占用继电器通道。
 
 响应：
 
@@ -321,7 +329,7 @@ cfg_<device_id>  ->  "30,90,1"
 
 ## 十、管理端 App 的行为（当前为继电器测试版）
 
-管理端 App（`manager/`，包名 `com.autophonez.manager`）**只做继电器开关测试**：
+管理端 App（`manager/`，应用名「测试充电」，包名 `com.autophonez.manager`）**只做继电器开关测试**：
 
 | 行为 | 说明 |
 |---|---|

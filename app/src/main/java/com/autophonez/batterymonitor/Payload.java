@@ -35,6 +35,7 @@ public final class Payload {
             o.put("temp_c", st == null ? 0.0 : round1(st.tempC));
             o.put("low_th", cfg.low);
             o.put("high_th", cfg.high);
+            o.put("relay", cfg.relay);
             o.put("ts", System.currentTimeMillis() / 1000L);
             return o.toString();
         } catch (Exception e) {
