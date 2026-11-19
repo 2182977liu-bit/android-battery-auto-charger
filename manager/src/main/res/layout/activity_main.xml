@@ -23,7 +23,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="14dp"
-            android:text="多台手机电量监控 · 阈值下发 · 继电器控制"
+            android:text="继电器开关测试 · 阈值逻辑在 ESP32 上"
             android:textColor="@color/text_sub"
             android:textSize="13sp" />
 
@@ -58,7 +58,6 @@
                     android:inputType="text"
                     android:maxLines="1"
                     android:textSize="14sp" />
-
                 <EditText
                     android:id="@+id/etPort"
                     android:layout_width="0dp"
@@ -118,9 +117,38 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 设备列表 -->
+        <!-- 全开 / 全关 -->
         <LinearLayout
-            android:id="@+id/deviceBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnAllOn"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="@drawable/btn_secondary"
+                android:text="全部打开"
+                android:textColor="@color/text_main"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btnAllOff"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/btn_secondary"
+                android:text="全部关闭"
+                android:textColor="@color/text_main"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- 继电器列表 -->
+        <LinearLayout
+            android:id="@+id/relayBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
@@ -132,7 +160,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:gravity="center"
-            android:text="暂无设备\n确认服务端地址和 Token 后点「保存并连接」"
+            android:text="还没有获取到继电器\n填好 ESP32 地址和 Token 后点「保存并连接」"
             android:textColor="@color/text_sub"
             android:textSize="13sp" />
 
@@ -140,7 +168,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="阈值与通道通过 POST /devices/config 下发给 ESP32；ESP32 离线时仍按最后一次配置自动控制。"
+            android:text="本 App 只用于测试继电器开关。充放电阈值、何时通断由 ESP32 固件自己判断。"
             android:textColor="@color/text_sub"
             android:textSize="11sp" />
     </LinearLayout>

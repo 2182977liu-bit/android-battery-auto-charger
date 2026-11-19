@@ -1,19 +1,15 @@
 package com.autophonez.manager;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -21,14 +17,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 充电管理台：展示多台上报设备，给每台设备下发「低电量阈值 / 高电量阈值 / 继电器通道」。
+ * 充电管理台 · 继电器测试版
  *
- * 数据来自 GET /devices，每 3 秒轮询一次；配置用 POST /devices/config 下发。
- * 服务端可以是 ESP32，也可以是 tools/web_dashboard.py（两者协议一致，方便先用电脑联调）。
+ * 用途：连上 ESP32-S3 后，获取它控制了几路继电器、每路当前通断状态，
+ * 然后手动开/关，验证接线、通道映射和固件逻辑是否正确。
+ *
+ * 充放电阈值逻辑完全在 ESP32 固件里，本 App 只做开关测试，不参与控制策略。
  */
 public class MainActivity extends Activity {
 
-    private static final long POLL_MS = 3000L;
+    private static final long POLL_MS = 2000L;
     private static final String PREF = "manager";
 
     private EditText etHost;
@@ -36,11 +34,11 @@ public class MainActivity extends Activity {
     private EditText etToken;
     private TextView tvStatus;
     private TextView tvEmpty;
-    private LinearLayout deviceBox;
+    private LinearLayout relayBox;
 
     private SharedPreferences sp;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final List<Device> devices = new ArrayList<>();
+    private final List<Relay> relays = new ArrayList<>();
 
     private String baseUrl = "";
     private String token = "";
@@ -67,7 +65,7 @@ public class MainActivity extends Activity {
         etToken = findViewById(R.id.etToken);
         tvStatus = findViewById(R.id.tvStatus);
         tvEmpty = findViewById(R.id.tvEmpty);
-        deviceBox = findViewById(R.id.deviceBox);
+        relayBox = findViewById(R.id.relayBox);
 
         sp = getSharedPreferences(PREF, MODE_PRIVATE);
         etHost.setText(sp.getString("host", ""));
@@ -90,8 +88,19 @@ public class MainActivity extends Activity {
                 }
             }
         });
+        findViewById(R.id.btnAllOn).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setAll(true);
+            }
+        });
+        findViewById(R.id.btnAllOff).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setAll(false);
+            }
+        });
 
-        // 有已保存的配置就直接开始轮询
         if (!etHost.getText().toString().trim().isEmpty()) {
             applyConnection();
         }
@@ -114,12 +123,10 @@ public class MainActivity extends Activity {
         main.removeCallbacks(pollRunnable);
     }
 
-    // ---------------------------------------------------------- 连接
-
     private void saveAndConnect() {
         String host = etHost.getText().toString().trim();
         if (host.isEmpty()) {
-            Toast.makeText(this, "先填服务端 IP", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "先填 ESP32 的 IP", Toast.LENGTH_SHORT).show();
             return;
         }
         int port;
@@ -144,12 +151,10 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             port = 8080;
         }
-        baseUrl = DeviceApi.baseUrl(etHost.getText().toString().trim(), port);
+        baseUrl = RelayApi.baseUrl(etHost.getText().toString().trim(), port);
         token = etToken.getText().toString().trim();
         setStatus("已配置 " + baseUrl + "，正在连接…");
     }
-
-    // ---------------------------------------------------------- 轮询
 
     private void pollOnce() {
         final String b = baseUrl;
@@ -162,14 +167,14 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 try {
-                    final List<Device> list = DeviceApi.list(b, t);
+                    final List<Relay> list = RelayApi.list(b, t);
                     main.post(new Runnable() {
                         @Override
                         public void run() {
-                            devices.clear();
-                            devices.addAll(list);
+                            relays.clear();
+                            relays.addAll(list);
                             render();
-                            setStatus("已连接 · " + list.size() + " 台设备 · " + nowText());
+                            setStatus("已连接 · " + list.size() + " 路继电器 · " + nowText());
                         }
                     });
                 } catch (final Exception e) {
@@ -194,251 +199,85 @@ public class MainActivity extends Activity {
         tvStatus.setText(text);
     }
 
-    // ---------------------------------------------------------- 渲染
-
     private void render() {
-        deviceBox.removeAllViews();
-        tvEmpty.setVisibility(devices.isEmpty() ? View.VISIBLE : View.GONE);
-        for (Device d : devices) {
-            deviceBox.addView(buildCard(d));
+        relayBox.removeAllViews();
+        tvEmpty.setVisibility(relays.isEmpty() ? View.VISIBLE : View.GONE);
+        for (Relay r : relays) {
+            relayBox.addView(buildRow(r));
         }
     }
 
-    private View buildCard(final Device d) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundResource(R.drawable.bg_card);
-        int p = dp(14);
-        card.setPadding(p, p, p, p);
+    private View buildRow(final Relay r) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setBackgroundResource(R.drawable.bg_card);
+        int p = dp(12);
+        row.setPadding(p, p, p, p);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.bottomMargin = dp(10);
-        card.setLayoutParams(lp);
+        row.setLayoutParams(lp);
 
-        // 第一行：设备 ID + 机型，右侧电量
-        LinearLayout row1 = new LinearLayout(this);
-        row1.setOrientation(LinearLayout.HORIZONTAL);
-        TextView title = text(d.id + " · " + d.model, 15, R.color.text_main);
-        title.setSingleLine(true);
-        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0,
+        LinearLayout info = new LinearLayout(this);
+        info.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1);
-        row1.addView(title, tlp);
+        row.addView(info, ilp);
 
-        int levelColor;
-        if (d.level >= 0 && d.level <= d.lowTh) {
-            levelColor = R.color.warn;
-        } else if (d.level >= d.highTh) {
-            levelColor = R.color.ok;
-        } else {
-            levelColor = R.color.primary;
-        }
-        String levelText = d.level < 0 ? "--%" : d.level + "%";
-        TextView tvLevel = text(levelText, 18, levelColor);
-        tvLevel.setTypeface(null, android.graphics.Typeface.BOLD);
-        row1.addView(tvLevel);
-        card.addView(row1);
+        TextView name = text(r.name.isEmpty() ? "通道 " + r.id : r.name, 16, R.color.text_main);
+        name.setTypeface(null, android.graphics.Typeface.BOLD);
+        info.addView(name);
 
-        // 电量条
-        ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        bar.setMax(100);
-        bar.setProgress(Math.max(0, d.level));
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(8));
-        blp.topMargin = dp(8);
-        blp.bottomMargin = dp(8);
-        card.addView(bar, blp);
+        String state = (r.on ? "ON · 通电" : "OFF · 断开") + (r.manual ? "（手动）" : "");
+        TextView tvState = text(state, 12, r.on ? R.color.ok : R.color.text_sub);
+        info.addView(tvState);
 
-        // 第二行：充电状态 + 阈值 + 通道
-        String line2 = (d.charging ? "充电中" : "未充电")
-                + " · 阈值 " + d.lowTh + "/" + d.highTh
-                + " · " + d.relayText();
-        TextView tv2 = text(line2, 12, R.color.text_sub);
-        card.addView(tv2);
-
-        // 第三行：最后上报 + 报文数 + 来源 IP + 在线状态
-        String line3 = "最后上报 " + d.ageText()
-                + " · " + (d.online ? "在线" : "离线")
-                + " · 报文 " + d.count
-                + " · " + d.lastIp;
-        TextView tv3 = text(line3, 11, R.color.text_sub);
-        LinearLayout.LayoutParams l3 = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        l3.topMargin = dp(4);
-        card.addView(tv3, l3);
-
-        // 设置按钮
-        Button btn = new Button(this);
-        btn.setText("设置阈值 / 通道");
-        btn.setTextSize(13);
-        btn.setTextColor(getColor(R.color.text_main));
-        btn.setBackgroundResource(R.drawable.btn_secondary);
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
-        btnLp.topMargin = dp(10);
-        card.addView(btn, btnLp);
-        btn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showConfigDialog(d);
-            }
-        });
-
-        card.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showConfigDialog(d);
-            }
-        });
-
-        return card;
-    }
-
-    // ---------------------------------------------------------- 配置对话框
-
-    private void showConfigDialog(final Device d) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        int p = dp(16);
-        box.setPadding(p, dp(8), p, 0);
-
-        box.addView(text("低电量阈值（≤ 此值开始充电）", 12, R.color.text_sub));
-        final EditText etLow = new EditText(this);
-        etLow.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        etLow.setText(String.valueOf(d.lowTh));
-        etLow.setTextSize(15);
-        box.addView(etLow);
-
-        box.addView(text("高电量阈值（≥ 此值断开充电）", 12, R.color.text_sub));
-        final EditText etHigh = new EditText(this);
-        etHigh.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        etHigh.setText(String.valueOf(d.highTh));
-        etHigh.setTextSize(15);
-        box.addView(etHigh);
-
-        box.addView(text("继电器通道（每台手机独立一路）", 12, R.color.text_sub));
-        final Spinner spRelay = new Spinner(this);
-        ArrayAdapter<String> ad = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"不控制", "通道 0", "通道 1", "通道 2", "通道 3"});
-        spRelay.setAdapter(ad);
-        spRelay.setSelection(d.relay < 0 ? 0 : Math.min(d.relay + 1, 4));
-        box.addView(spRelay);
-
-        // 手动覆盖
-        LinearLayout manualRow = new LinearLayout(this);
-        manualRow.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        mlp.topMargin = dp(12);
-        manualRow.setLayoutParams(mlp);
-
-        Button btnOn = smallButton("强制通电");
-        Button btnOff = smallButton("强制断电");
-        Button btnAuto = smallButton("恢复自动");
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0, dp(38), 1);
-        blp.setMarginStart(0);
-        manualRow.addView(btnOn, blp);
-        LinearLayout.LayoutParams blp2 = new LinearLayout.LayoutParams(0, dp(38), 1);
-        blp2.setMarginStart(dp(6));
-        manualRow.addView(btnOff, blp2);
-        LinearLayout.LayoutParams blp3 = new LinearLayout.LayoutParams(0, dp(38), 1);
-        blp3.setMarginStart(dp(6));
-        manualRow.addView(btnAuto, blp3);
-        box.addView(manualRow);
+        Button btnOn = smallButton("开");
+        Button btnOff = smallButton("关");
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(dp(64), dp(40));
+        row.addView(btnOn, blp);
+        LinearLayout.LayoutParams blp2 = new LinearLayout.LayoutParams(dp(64), dp(40));
+        blp2.setMarginStart(dp(8));
+        row.addView(btnOff, blp2);
 
         btnOn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                manualRelay(d, true);
+                setOne(r, true);
             }
         });
         btnOff.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                manualRelay(d, false);
-            }
-        });
-        btnAuto.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                autoRelay(d);
+                setOne(r, false);
             }
         });
 
-        TextView note = text("阈值下发后立刻生效；ESP32 断网时仍按最后一次配置自动控制。", 11,
-                R.color.text_sub);
-        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        nlp.topMargin = dp(10);
-        box.addView(note, nlp);
-
-        new AlertDialog.Builder(this)
-                .setTitle(d.id + " 的配置")
-                .setView(box)
-                .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(android.content.DialogInterface dialog, int which) {
-                        saveConfig(d, etLow, etHigh, spRelay);
-                    }
-                })
-                .setNegativeButton("取消", null)
-                .show();
+        return row;
     }
 
     private Button smallButton(String label) {
         Button b = new Button(this);
         b.setText(label);
-        b.setTextSize(12);
+        b.setTextSize(14);
         b.setTextColor(getColor(R.color.text_main));
         b.setBackgroundResource(R.drawable.btn_secondary);
         b.setPadding(0, 0, 0, 0);
         return b;
     }
 
-    private void saveConfig(final Device d, EditText etLow, EditText etHigh, Spinner spRelay) {
-        int low;
-        int high;
-        try {
-            low = Integer.parseInt(etLow.getText().toString().trim());
-            high = Integer.parseInt(etHigh.getText().toString().trim());
-        } catch (Exception e) {
-            Toast.makeText(this, "阈值必须是数字", Toast.LENGTH_SHORT).show();
+    private void setOne(final Relay r, final boolean on) {
+        if (baseUrl.isEmpty()) {
+            Toast.makeText(this, "先连接服务端", Toast.LENGTH_SHORT).show();
             return;
         }
-        if (low < 5 || low > 60 || high < 50 || high > 100) {
-            Toast.makeText(this, "低阈值 5~60，高阈值 50~100", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (low >= high) {
-            Toast.makeText(this, "低阈值必须小于高阈值", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        final int relay = spRelay.getSelectedItemPosition() - 1;
-        final int fl = low;
-        final int fh = high;
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    DeviceApi.setConfig(baseUrl, token, d.id, fl, fh, relay);
-                    toastMain("已下发：" + d.id + " " + fl + "/" + fh
-                            + (relay < 0 ? " 不控制" : " 通道" + relay));
-                    pollOnce();
-                } catch (final Exception e) {
-                    toastMain("下发失败：" + e.getMessage());
-                }
-            }
-        }).start();
-    }
-
-    private void manualRelay(final Device d, final boolean on) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    DeviceApi.setRelay(baseUrl, token, d.id, on, false);
-                    toastMain(d.id + (on ? " 强制通电" : " 强制断电"));
+                    RelayApi.set(baseUrl, token, r.id, on);
+                    toastMain("通道 " + r.id + (on ? " 已开" : " 已关"));
                     pollOnce();
                 } catch (final Exception e) {
                     toastMain("操作失败：" + e.getMessage());
@@ -447,17 +286,41 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void autoRelay(final Device d) {
+    private void setAll(final boolean on) {
+        if (baseUrl.isEmpty()) {
+            Toast.makeText(this, "先连接服务端", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (relays.isEmpty()) {
+            Toast.makeText(this, "还没获取到继电器列表", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final List<Relay> snapshot = new ArrayList<>(relays);
         new Thread(new Runnable() {
             @Override
             public void run() {
-                try {
-                    DeviceApi.setRelay(baseUrl, token, d.id, false, true);
-                    toastMain(d.id + " 恢复自动");
-                    pollOnce();
-                } catch (final Exception e) {
-                    toastMain("操作失败：" + e.getMessage());
+                int ok = 0;
+                String lastErr = "";
+                for (Relay r : snapshot) {
+                    try {
+                        RelayApi.set(baseUrl, token, r.id, on);
+                        ok++;
+                    } catch (Exception e) {
+                        lastErr = e.getMessage();
+                    }
                 }
+                final int done = ok;
+                final String err = lastErr;
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(MainActivity.this,
+                                (on ? "全开" : "全关") + " 成功 " + done + "/" + snapshot.size()
+                                        + (err.isEmpty() ? "" : "，最后错误：" + err),
+                                Toast.LENGTH_SHORT).show();
+                    }
+                });
+                pollOnce();
             }
         }).start();
     }
@@ -470,8 +333,6 @@ public class MainActivity extends Activity {
             }
         });
     }
-
-    // ---------------------------------------------------------- 小工具
 
     private TextView text(String content, int sizeSp, int colorRes) {
         TextView t = new TextView(this);

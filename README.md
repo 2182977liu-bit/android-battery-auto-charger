@@ -32,14 +32,14 @@
 | 只想先看看数据，没有硬件 | 用**网页查看端**，电脑上跑一个 Python 文件 | 3 分钟 |
 | 想让手机真的自动充电 | 需要 **ESP32-S3 + 继电器模块**（十几块） | 半小时 |
 | 不想买硬件，但想手机自己控制 | 面板可跑在手机上的 Linux 容器（Podroid），见 [`手机端部署速查.md`](手机端部署速查.md) | 20 分钟 |
-| 想统一管多台手机、给每台设阈值 | 装**管理端 App（充电管理台）**，接口见 [`ESP32接口说明.md`](ESP32接口说明.md) | 5 分钟 |
+| 想测试 ESP32 的继电器开关 | 装**管理端 App（充电管理台）**，接口见 [`ESP32接口说明.md`](ESP32接口说明.md) | 2 分钟 |
 
 ### 0.1 下载 App
 
 | App | 装在哪 | 下载 |
 |---|---|---|
 | **电量哨兵**（上报端） | 每台要监控的手机 | [app-debug.apk（约 35 KB）](https://github.com/2182977liu-bit/android-battery-auto-charger/releases/latest/download/app-debug.apk) |
-| **充电管理台**（管理端） | 你自己随身用的手机/平板 | [manager-debug.apk](https://github.com/2182977liu-bit/android-battery-auto-charger/releases/latest/download/manager-debug.apk) |
+| **充电管理台**（管理端，继电器测试） | 你自己随身用的手机/平板 | [manager-debug.apk](https://github.com/2182977liu-bit/android-battery-auto-charger/releases/latest/download/manager-debug.apk) |
 
 装好后在系统设置里给「电量哨兵」打开「安装未知应用」，之后 App 会自己检查更新，只需点一次「安装」。
 管理端目前不做自动更新，有新版本重新下载安装即可。
@@ -154,8 +154,9 @@ CI 自动发版：改完 `versionName` 直接 push，workflow 会读 `app/build.
 完整实现细节（两侧数据契约、CI 片段、`PackageInstaller` 用法、踩坑清单、迁移到别的项目要改哪几处）
 见 [`App自动更新实现说明.md`](App自动更新实现说明.md)。
 
-多台设备 + 管理端 App 的完整接口契约（`GET /devices`、`POST /devices/config`、`POST /devices/relay`，
-含字段表、错误码、ESP32-S3 实现要点与 NVS 结构）见 [`ESP32接口说明.md`](ESP32接口说明.md)。
+管理端（继电器测试）与设备侧的完整接口契约（`GET /relays`、`POST /relay`，
+以及 `GET /devices`、`POST /devices/config`、`POST /devices/relay`，含字段表、错误码、
+ESP32-S3 实现要点与 NVS 结构）见 [`ESP32接口说明.md`](ESP32接口说明.md)。
 
 ## 三·六、App 界面
 

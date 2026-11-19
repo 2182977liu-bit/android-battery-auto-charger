@@ -26,6 +26,9 @@
 2. **上报链路不变**：手机端仍然是 `POST /battery`，现有 App 一行代码不用改。
 3. **阈值判断在 ESP32 侧**：手机只报真相，不参与控制。
 
+> 当前管理端 App 是**继电器测试版**，只调用 `/relays` 和 `/relay` 两条接口；
+> `/devices/*` 三条设备接口预留给网页端和按电量自动控制的场景。
+
 ## 二、鉴权
 
 所有接口（`/battery`、`/devices`、`/devices/config`、`/devices/relay`）统一用请求头：
@@ -43,9 +46,11 @@ X-Auth-Token: <与服务端一致的 Token>
 | 方法 | 路径 | 调用方 | 作用 |
 |---|---|---|---|
 | POST | `/battery` | 上报端 App | 上报电量事件（**现有协议，不变**） |
-| GET | `/devices` | 管理端 App | 拉取全部设备状态 + 各自配置 |
-| POST | `/devices/config` | 管理端 App | 下发某台设备的阈值与继电器通道 |
-| POST | `/devices/relay` | 管理端 App | 手动强制通/断，或恢复自动 |
+| GET | `/relays` | **管理端 App（测试）** | 获取 ESP32 控制了几路继电器、每路当前状态 |
+| POST | `/relay` | **管理端 App（测试）** | 手动开/关某一路继电器 |
+| GET | `/devices` | 网页/调试 | 拉取全部设备状态 + 各自配置 |
+| POST | `/devices/config` | 网页/调试 | 下发某台设备的阈值与继电器通道 |
+| POST | `/devices/relay` | 网页/调试 | 按设备手动覆盖继电器 |
 | GET | `/status` | 调试 | 兼容旧接口，简单状态列表 |
 
 ---
@@ -314,16 +319,76 @@ cfg_<device_id>  ->  "30,90,1"
 
 ---
 
-## 十、管理端 App 的行为
+## 十、管理端 App 的行为（当前为继电器测试版）
+
+管理端 App（`manager/`，包名 `com.autophonez.manager`）**只做继电器开关测试**：
 
 | 行为 | 说明 |
 |---|---|
-| 轮询 | 每 3 秒 `GET /devices`，失败时状态栏提示，不影响继续重试 |
-| 展示 | 设备卡片：电量、充电状态、阈值、通道、继电器状态、最后上报、报文数、来源 IP |
-| 配置 | 点卡片弹出对话框：低/高阈值 + 通道（不控制 / 0~3） |
-| 手动 | 对话框内「强制通电 / 强制断电 / 恢复自动」三个按钮 |
+| 连接 | 填 ESP32 的 IP:端口 + Token，保存后每 2 秒 `GET /relays` |
+| 展示 | 每路继电器一行：通道号、当前 ON/OFF、是否手动状态 |
+| 测试 | 每行「开」「关」按钮；顶部还有「全部打开 / 全部关闭」 |
+| 边界 | **不做阈值配置、不做电量展示**。充放电逻辑完全在 ESP32 固件里 |
 
-App 源码：`manager/`（独立 APK，包名 `com.autophonez.manager`）。
+`/devices`、`/devices/config`、`/devices/relay` 这三条是**设备侧数据接口**，
+网页端和后续按电量自动控制的场景会用到，管理端当前版本不调用。
+
+---
+
+## 十·五、继电器测试接口（管理端当前使用）
+
+### GET /relays
+
+```http
+GET /relays HTTP/1.1
+X-Auth-Token: autoz-phone-2026
+```
+
+响应：
+
+```json
+{
+  "ok": true,
+  "count": 4,
+  "relays": [
+    {"id": 0, "name": "通道 0", "on": false, "manual": false},
+    {"id": 1, "name": "通道 1", "on": true,  "manual": false},
+    {"id": 2, "name": "通道 2", "on": false, "manual": true},
+    {"id": 3, "name": "通道 3", "on": false, "manual": false}
+  ]
+}
+```
+
+- `count`：ESP32 实际控制的继电器数量，**由固件决定，App 按返回长度渲染**
+- `id`：通道号，从 0 开始
+- `on`：当前通断状态
+- `manual`：是否处于手动覆盖（测试期间一般为 true）
+
+### POST /relay
+
+```http
+POST /relay HTTP/1.1
+X-Auth-Token: autoz-phone-2026
+Content-Type: application/json
+
+{"id": 0, "on": true}
+```
+
+响应：
+
+```json
+{"ok": true, "id": 0, "on": true, "manual": true}
+```
+
+错误：
+
+- `400 {"ok":false,"err":"bad_channel"}` — 通道号超出实际数量
+- `400 {"ok":false,"err":"bad_request"}` — 缺少 `on` 字段或 JSON 非法
+- `401` — Token 不匹配
+
+> 手动测试后通道进入 `manual = true`；固件侧建议提供「恢复自动」逻辑
+> （例如收到新的 `/battery` 事件、或定时超时后回到阈值控制），
+> 避免测试完忘记切回自动导致一直通电。
 
 ---
 

@@ -15,7 +15,11 @@ AutoPhoneZ 局域网网页查看端 · 多设备版（测试用）
     POST /api/reset     清空所有数据重新开始
     POST /api/token     网页上修改上报 Token（body: {"token":"..."}）
 
-管理端 App 用的三条接口（与《ESP32接口说明.md》一致，ESP32 未来照此实现）：
+管理端 App（继电器测试）用的两条接口：
+    GET  /relays             获取继电器数量与每路状态
+    POST /relay              手动开/关某一路（body: {"id":0,"on":true}）
+
+设备侧数据接口（网页/调试，与《ESP32接口说明.md》一致）：
     GET  /devices            拉取全部设备状态 + 各自阈值/通道
     POST /devices/config     下发某台设备的阈值与继电器通道
     POST /devices/relay      手动强制通/断，或 {"auto":true} 恢复自动
@@ -67,6 +71,10 @@ STATE = {
     "devices": {},   # device_id -> 设备状态
     "events": [],    # 全局事件流（带设备字段）
 }
+
+# 继电器测试用的模拟通道（与设备阈值模拟相互独立）
+RELAYS = [False, False, False, False]
+RELAY_MANUAL = [False, False, False, False]
 
 
 def now_str() -> str:
@@ -725,6 +733,14 @@ class Handler(BaseHTTPRequestHandler):
                 })
             return self._json(200, {"ok": True, "server_time": int(time.time()),
                                     "devices": devs})
+        elif path == "/relays":
+            # 继电器测试接口：返回 ESP32 控制了几路、每路当前状态
+            if self.headers.get("X-Auth-Token") != TOKEN:
+                return self._json(401, {"ok": False, "err": "bad_token"})
+            with LOCK:
+                items = [{"id": i, "name": f"通道 {i}", "on": RELAYS[i],
+                          "manual": RELAY_MANUAL[i]} for i in range(len(RELAYS))]
+            return self._json(200, {"ok": True, "count": len(items), "relays": items})
         elif path == "/status":
             s = snapshot()
             devs = [{
@@ -799,6 +815,26 @@ class Handler(BaseHTTPRequestHandler):
             }
             record(fake, "127.0.0.1", simulated=True)
             return self._json(200, {"ok": True})
+
+        if path == "/relay":
+            # 继电器测试接口：手动开/关某一路（只用于验证接线和固件）
+            if self.headers.get("X-Auth-Token") != TOKEN:
+                return self._json(401, {"ok": False, "err": "bad_token"})
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(length) if length else b""
+            try:
+                data = json.loads(raw or b"{}")
+                rid = int(data.get("id"))
+                on = bool(data["on"])
+            except Exception:
+                return self._json(400, {"ok": False, "err": "bad_request"})
+            if rid < 0 or rid >= len(RELAYS):
+                return self._json(400, {"ok": False, "err": "bad_channel"})
+            with LOCK:
+                RELAYS[rid] = on
+                RELAY_MANUAL[rid] = True
+            print(f"[{now_str()}] [继电器测试] 通道 {rid} -> {'ON' if on else 'OFF'}")
+            return self._json(200, {"ok": True, "id": rid, "on": on, "manual": True})
 
         if path == "/devices/config":
             if self.headers.get("X-Auth-Token") != TOKEN:

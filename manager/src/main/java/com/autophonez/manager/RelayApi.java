@@ -14,19 +14,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 与服务端（ESP32 或网页模拟端）通信。
+ * 继电器测试接口，与 ESP32-S3 通信。
  *
- * 接口契约见仓库根目录《ESP32接口说明.md》，三条：
- *   GET  /devices          拉全部设备状态
- *   POST /devices/config   下发某台设备的阈值和通道
- *   POST /devices/relay    手动覆盖某台设备的继电器
- * 全部用 Header X-Auth-Token 鉴权。
+ *   GET  /relays   -> {"ok":true,"count":4,"relays":[{"id":0,"name":"通道 0","on":false}, ...]}
+ *   POST /relay    -> body {"id":0,"on":true}
+ *
+ * 只做手动开关测试，充放电阈值逻辑在 ESP32 固件里，本 App 不参与。
  */
-public final class DeviceApi {
+public final class RelayApi {
 
     private static final int TIMEOUT_MS = 8000;
 
-    private DeviceApi() {
+    private RelayApi() {
     }
 
     public static String baseUrl(String host, int port) {
@@ -43,12 +42,12 @@ public final class DeviceApi {
         return "http://" + h + ":" + p;
     }
 
-    /** 拉取设备列表；服务端未实现时抛异常。 */
-    public static List<Device> list(String baseUrl, String token) throws Exception {
-        String body = request("GET", baseUrl + "/devices", token, null);
+    /** 获取 ESP32 当前控制的全部继电器及状态。 */
+    public static List<Relay> list(String baseUrl, String token) throws Exception {
+        String body = request("GET", baseUrl + "/relays", token, null);
         JSONObject root = new JSONObject(body);
-        List<Device> out = new ArrayList<>();
-        JSONArray arr = root.optJSONArray("devices");
+        List<Relay> out = new ArrayList<>();
+        JSONArray arr = root.optJSONArray("relays");
         if (arr == null) {
             return out;
         }
@@ -57,50 +56,22 @@ public final class DeviceApi {
             if (o == null) {
                 continue;
             }
-            Device d = new Device();
-            d.id = o.optString("device_id", o.optString("id", "unknown"));
-            d.model = o.optString("model", "-");
-            d.androidVer = o.optString("android", "-");
-            d.plugged = o.optString("plugged", "-");
-            d.event = o.optString("event", "-");
-            d.lastIp = o.optString("last_ip", "-");
-            d.level = o.optInt("level", -1);
-            d.voltageMv = o.optInt("voltage_mv", o.optInt("volt", 0));
-            d.tempC = o.optDouble("temp_c", o.optDouble("temp", 0));
-            d.ageSec = o.optLong("age_sec", -1);
-            d.count = o.optLong("count", 0);
-            d.lowTh = o.optInt("low_th", 30);
-            d.highTh = o.optInt("high_th", 90);
-            d.relay = o.optInt("relay", 0);
-            d.charging = o.optBoolean("charging", false);
-            d.online = o.optBoolean("online", d.ageSec >= 0 && d.ageSec < 900);
-            d.relayOn = o.optBoolean("relay_on", o.optBoolean("relay", false));
-            d.manual = o.optBoolean("manual", false);
-            out.add(d);
+            Relay r = new Relay();
+            r.id = o.optInt("id", i);
+            r.name = o.optString("name", "通道 " + r.id);
+            r.on = o.optBoolean("on", false);
+            r.manual = o.optBoolean("manual", false);
+            out.add(r);
         }
         return out;
     }
 
-    public static void setConfig(String baseUrl, String token, String deviceId,
-                                 int lowTh, int highTh, int relay) throws Exception {
+    /** 手动开/关某一路。 */
+    public static void set(String baseUrl, String token, int id, boolean on) throws Exception {
         JSONObject body = new JSONObject();
-        body.put("device_id", deviceId);
-        body.put("low_th", lowTh);
-        body.put("high_th", highTh);
-        body.put("relay", relay);
-        request("POST", baseUrl + "/devices/config", token, body.toString());
-    }
-
-    public static void setRelay(String baseUrl, String token, String deviceId,
-                                boolean on, boolean auto) throws Exception {
-        JSONObject body = new JSONObject();
-        body.put("device_id", deviceId);
-        if (auto) {
-            body.put("auto", true);
-        } else {
-            body.put("on", on);
-        }
-        request("POST", baseUrl + "/devices/relay", token, body.toString());
+        body.put("id", id);
+        body.put("on", on);
+        request("POST", baseUrl + "/relay", token, body.toString());
     }
 
     private static String request(String method, String url, String token, String body)
