@@ -11,10 +11,10 @@
 │ (电量哨兵)       │  JSON 电量事件        │                      │
 └─────────────────┘ ───────────────────► │ · 收报文、存状态      │
                                           │ · 每设备阈值存 NVS    │
-┌─────────────────┐    GET /devices      │ · 按 device_id 控制   │
+┌─────────────────┐    GET /relays       │ · 按 device_id 控制   │
 │ 管理端 App       │ ◄─────────────────── │   对应继电器通道      │
-│ (充电管理台)      │  POST /devices/config│                      │
-└─────────────────┘  POST /devices/relay └──────────┬───────────┘
+│ (充电管理台)      │  POST /relay         │                      │
+└─────────────────┘  （继电器开关测试）    └──────────┬───────────┘
                                                      │ GPIO
                                                      ▼
                                             继电器 0..3 / 充电口
@@ -31,7 +31,7 @@
 
 ## 二、鉴权
 
-所有接口（`/battery`、`/devices`、`/devices/config`、`/devices/relay`）统一用请求头：
+所有接口（`/battery`、`/relays`、`/relay`、`/devices`、`/devices/config`、`/devices/relay`）统一用请求头：
 
 ```
 X-Auth-Token: <与服务端一致的 Token>
